@@ -1,4 +1,4 @@
-#.include "debugh.s"
+.include "debugh.s"
 
 .globl ddebug
 ddebug:

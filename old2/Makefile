@@ -1,4 +1,4 @@
-.PHONY: clean run
+.PHONY: clean
 
 run: knight
 	./knight -e 'D 3'

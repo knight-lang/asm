@@ -1,64 +1,56 @@
+.include "sharedh.s"
+
 .data
 source:
 	/* .asciz "; = a 3 : O + 'a*4=' * a 4" */
-	.asciz "i"
+	.asciz "123"
 # 	.asciz "123'abdqw\"
 # '"#\'
 
 .globl _main
 .text
 _main:
-	push %rbx
+	sub $8, %rsp
 
-	call process_arguments    // process command line arguments
-	mov %rax, %rbx
-	call kn_startup        // Start up knight
-
-	xor %eax, %eax
-	pop %rbx; ret
-
-	lea source(%rip), %rdi
+	call process_arguments
+	mov %rax, %rdi
 	call kn_parse
 	mov %rax, %rdi
-	call kn_vl_dump
-/*
-	# mov %rbx, %rdi
-	# call _strlen
-	# mov %rax, %rdi
-	mov $4, %rdi
-	call kn_str_alloc
+	call kn_value_run
 
-	mov %rax, %rdi
-	mov %rax, %rbx
-
-	call kn_str_deref
-	mov %rax, %rdx
-	lea source(%rip), %rsi
-	call _strcpy
-	mov %rax, %rsi
-	lea printf1(%rip), %rdi
-	call _printf
-
-	mov %rbx, %rax
-	call kn_str_free
-
-
-	call kn_parse
-
-	mov %rax, %rsi
-	lea printf1(%rip), %rdi
-
-	call _printf
-
-	#call kn_vl_dump
-
-	call kn_run
-*/
+	add $8, %rsp
 	xor %eax, %eax
-	pop %rbx
 	ret
 
+# parse command line arguments, returning a `char *`
+# note that the returned value isn't necessarily owned.
 process_arguments:
-	; mov 16(%rsi), %rdi
-	lea source(%rip), %rdi
-	jmp _strdup
+	cmp $3, %rdi
+	jne usage
+	mov 8(%rsi), %rdi
+	mov (%rdi), %ax # move both the lower and upper parts in.
+
+	cmp $'-', %al # must start with `-`
+	jne usage
+	cmp $'e', %ah # check to see if it's an expression
+	jne 0f
+	mov 16(%rsi), %rax # load the third argument and return it
+	ret
+0:
+	mov 16(%rsi), %rdi # load the filename, as we're pros not going to usage.
+	cmp $'f', %ah
+	je readfile
+usage:
+	sub $8, %rsp
+	lea usage_str(%rip), %rdi
+	mov (%rsi), %rsi
+	call _printf
+	call die
+
+
+readfile:
+	jmp _abort # todo
+
+.data:
+usage_str:
+	.asciz "usage: %s (-e 'expr' | -f file)\n"

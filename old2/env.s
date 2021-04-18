@@ -27,7 +27,7 @@ kn_env_startup:
 
 	;/* load starting and ending positions */
 	lea KN_ENV_NBUCKETS(%rip), %ebx
-	lea , %r12
+	/*lea , %r12*/
 0:
 	;/* allocate and assign the bucket's pointer */
 	mov $(KN_ENV_CAPACITY * KN_ENV_VAR_SIZE), %rdi
@@ -36,7 +36,7 @@ kn_env_startup:
 
 	;/* increment the current bucket and allocate the next one */
 	add $KN_ENV_BUCKET_SIZE, %rbx
-	cmp %(KN_ENV_NBUCKETS * KN_ENV_BUCKET_SIZE)(%rbx), %rbx
+	/*cmp %(KN_ENV_NBUCKETS * KN_ENV_BUCKET_SIZE)(%rbx), %rbx*/
 	jne 0b
 
 	/* restore the startup and return */
