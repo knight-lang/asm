@@ -1,7 +1,7 @@
 .include "valueh.s"
 
-.globl kn_value_run
-kn_value_run:
+.globl value_run
+value_run:
 	mov %rdi, %r15
 	sub $8, %rsp
 	call debug
@@ -9,6 +9,6 @@ kn_value_run:
 	call _exit
 
 
-.globl kn_value_free
-kn_value_free:
+.globl value_free
+value_free:
 	jmp ddebug

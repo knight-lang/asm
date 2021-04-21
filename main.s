@@ -5,7 +5,7 @@
 .data
 source:
 	/* .asciz "; = a 3 : O + 'a*4=' * a 4" */
-	.asciz "TRUE	a "
+	.asciz "'Hello world!'	a "
 dump:
 	.asciz "'%s'\n"
 # 	.asciz "123'abdqw\"
@@ -22,11 +22,16 @@ foo:
 #	.quad source
 .text
 _main:
+	sub $8, %rsp
+	lea source(%rip), %rdi
+	call _strdup
+	mov %rax, %rdi
+	call parse
 
-	lea foo(%rip), %rax
-	KN_STR_DEREF %rax, %rsi
+	VALUE_AS_STRING %rax
+	STR_DEREF %rax, %rsi
 	lea dump(%rip), %rdi
-	jmp abort
+	call abort
 	#xor %ecx, %ecx
 	#movw 4(%rax), %cx
 	#xor %ch, %ch
@@ -40,14 +45,14 @@ _main1:
 	call process_arguments
 	mov %rax, %rdi
 # parse program text
-	call kn_parse
+	call parse
 	mov %rax, %rdi
 	call ddebug
 # execute the program
-	call kn_value_run
+	call value_run
 # free the returned value
 	mov %rax, %rdi
-	call kn_value_free
+	call value_free
 	# todo: do we free the environment as well?
 
 	add $8, %rsp

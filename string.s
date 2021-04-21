@@ -1,87 +1,83 @@
-/* string structure:
-4 bytes refcount
-1 byte flag
-EITHER:
-	{ 1 byte length, rest embedded }
-OR:
-	{ 3 padding, 8 bytes length, 8 bytes pointer }
-}
-*/
+.include "stringh.s"
 
-.globl kn_string_new_borrowed
-kn_string_new_borrowed:
-	call ddebug
 
-/*
-foo:
-.byte 0x01
-.byte 0x02
-.byte 0x03
-.byte 0x04
-.byte 0xff
-.byte 0xee
-.quad 0x05 
-.text
-_main:
-	lea foo(%rip), %rax
-	xor %ecx, %ecx
-	movw 4(%rax), %cx
-	xor %ch, %ch
-	jmp ddebug
-*/
+.macro allocate_string flags=$STR_FL_STRUCT_ALLOC
+	mov $STR_SIZE, %rdi
+	call xmalloc
+	movw $1, STR_OFFSET_refcount(%rax)
+	movb \flags, STR_OFFSET_flags(%rax)
+.endm
 
-# struct kn_string {
-# 	/*
-# 	 * The flags that dictate how to manage this struct's memory.
-# 	 *
-# 	 * Note that the struct _must_ have an 8-bit alignment, so as to work with
-# 	 * `kn_value`'s layout.
-# 	 */
-# 	_Alignas(8) enum kn_string_flags flags;
-# 
-# 	/*
-# 	 * The amount of references to this string.
-# 	 *
-# 	 * This is increased when `kn_string_clone`d and decreased when
-# 	 * `kn_string_free`d, and when it reaches zero, the struct will be freed.
-# 	 */
-# 	unsigned refcount;
-# 
-# 	/* All strings are either embedded or allocated. */
-# 	union {
-# 		struct {
-# 			/*
-# 			 * The length of the embedded string.
-# 			 */
-# 			char length;
-# 
-# 			/*
-# 			 * The actual data for the embedded string.
-# 			 */
-# 			char data[KN_STRING_EMBEDDED_LENGTH];
-# 		} embed;
-# 
-# 		struct {
-# 			/*
-# 			 * The length of the allocated string.
-# 			 *
-# 			 * This should equal `strlen(str)`, and is just an optimization aid.
-# 			 */
-# 			size_t length;
-# 
-# 			/*
-# 			 * The data for an allocated string.
-# 			 */
-# 			char *str;
-# 		} alloc;
-# 	};
-# 
-# 	/*
-# 	 * Extra padding for the struct, to make embedded strings have more room.
-# 	 *
-# 	 * This is generally a number that makes this struct's size an even multiple
-# 	 * of two (so as to fill the space an allocator gives us).
-# 	 */
-# 	char _padding[KN_STRING_PADDING_LENGTH];
-# };
-# 
+.globl string_alloc
+string_alloc:
+	push %rbx
+	# allocate string
+	mov %rdi, %rbx # store length
+	mov $STR_SIZE, %rdi
+	call xmalloc
+	# populate refcount
+	movw $1, STR_OFFSET_refcount(%rax) # we always start with 1 refcount
+	# check to see if we're embeddable
+	cmp $STR_MAX_EMBED_LENGTH, %rsi
+	jg 0f
+	# populate embedded string
+	movb $(STR_FL_STRUCT_ALLOC | STR_FL_EMBED), STR_OFFSET_flags(%rax)
+	movb %bl, STR_OFFSET_embedded_length(%rax)
+	pop %rbx
+	ret
+0:
+	# populate heap alloacted string
+	movb $STR_FL_STRUCT_ALLOC, STR_OFFSET_flags(%rax)
+	movq %rbx, STR_OFFSET_allocated_length(%rax)
+	pop %rbx
+	ret
+
+.globl string_cache
+string_cache:
+	jmp die
+
+.globl string_new_owned
+string_new_owned:
+	jmp die
+
+.globl string_new_borrowed
+string_new_borrowed:
+	# TODO: in the future, we should actually cache
+	sub $8, %rsp
+	push %rbx
+	push %r12
+	mov %rdi, %rbx # store string
+	mov %rsi, %r12 # store length
+	string_alloc
+	mov 
+0:
+	mov %rsi, %r12 # preserve length
+	call _strndup
+	mov %rax, %rbx
+	mov $STR_SIZE, %rdi
+	call xmalloc
+	movw $0, (%rax)
+	movb $STR_FL_STRUCT_ALLOC, 4(%rax) # only flag is allocation (for now).
+	mov %r12, 8(%rax)
+	mov %rbx, 16(%rax)
+	pop %r12
+	pop %rbx
+	add $8, %rsp
+	ret
+
+
+.globl string_cache_lookup
+string_cache_lookup:
+	jmp die
+
+.globl string_clone
+string_clone:
+	jmp die
+
+.globl string_clone_static
+string_clone_static:
+	jmp die
+
+.globl string_free
+string_free:
+	jmp die

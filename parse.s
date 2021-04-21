@@ -15,8 +15,8 @@
 	dec stream_reg
 .endm
 
-.globl kn_parse
-kn_parse:
+.globl parse
+parse:
 	push stream_reg
 	mov %rdi, stream_reg
 handle_stream:
@@ -58,7 +58,7 @@ integer:
 	add %rcx, %rax
 	jmp 0b
 1:
-	KN_NEW_NUMBER %rax
+	NEW_NUMBER %rax
 	ret
 
 identifier:
@@ -78,23 +78,88 @@ identifier:
 	mov stream_reg, %rsi
 	sub %rdi, %rsi
 	dec %rsi
-	call kn_env_fetch
+	call env_fetch
 # convert it to a string
-	KN_NEW_VARIABLE %rax
+	NEW_VARIABLE %rax
 	jmp done_parsing
 
 string:
-	call die
+	mov stream_reg, %rdi # keep string start
+0: # parse string
+	peek %ecx
+	advance
+	test %cl, %cl
+	je string_missing_quote
+	cmp %al, %cl
+	jne 0b
+
+# find length of string
+ 	mov stream_reg, %rsi
+ 	sub %rdi, %rsi
+ 	dec %rsi
+# allocate the string and return
+ 	call string_new_borrowed
+ 	NEW_STRING %rax
+ 	jmp done_parsing
+
+string_missing_quote:
+	dec %rdi # todo: can this be lea?
+	mov %rdi, %rsi
+	lea unterminated_quote_msg(%rip), %rdi
+	call abort
+
+
+# 	sub $32, %rsp
+# 	mov stream_reg, (%rsp) /* store quote start */
+# 0:
+# 	peek %ecx
+# 	advance
+# 	cmp $0, %ecx
+# 	je 1f
+# 	cmp %al, %cl
+# 	jne 0b
+# 
+# 	/* find the length of the string */
+# 	mov stream_reg, %rdi
+# 	sub (%rsp), %rdi
+# 	dec %rdi
+# 	mov %rdi, 8(%rsp) /* preserve length */
+# 
+# 	/* allocate it and dereference it */
+# 	call kn_str_alloc
+# 	mov %rax, 16(%rsp)
+# 	mov %rax, %rdi
+# 	call kn_str_deref
+# 
+# 	/* populate the string */
+# 	mov %rax, %rdi    /* the string we jsut allocated */
+# 	mov (%rsp), %rsi  /* quote start */
+# 	mov 8(%rsp), %rdx /* length */
+# 
+# 	/* set trailing NUL */
+# 	mov %rdi, %rax
+# 	add %rdx, %rax
+# 	movb $0, (%rax)
+	# 
+# 	call _memcpy
+# 
+# 	/* return */
+# 	mov 16(%rsp), %rax /* load the allocated string */
+# 	add $32, %rsp
+# 
+# 	kn_vl_new_string %rax
+# 	jmp done_parsing
+
 
 
 literal_false:
 	xor %eax, %eax
 	jmp strip_literal
 literal_true:
-	mov $KN_TRUE, %eax
+	mov $TRUE, %eax
 	jmp strip_literal
 literal_null:
-	mov $KN_NULL, %eax
+	mov $NULL, %eax
 	# fallthrough
 strip_literal:
 	peek %ecx
