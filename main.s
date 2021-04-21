@@ -1,30 +1,64 @@
 .include "sharedh.s"
+.include "valueh.s"
+.include "stringh.s"
 
 .data
 source:
 	/* .asciz "; = a 3 : O + 'a*4=' * a 4" */
-	.asciz "123"
+	.asciz "TRUE	a "
+dump:
+	.asciz "'%s'\n"
 # 	.asciz "123'abdqw\"
 # '"#\'
-
-.globl _main
+foo:
+	.byte 0xaa,0xaa,0xaa,0xaa
+	.byte 0x12
+	.byte 0xbb
+	.byte 'H', 'e'
+	.byte 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l'
+	.byte 'd', '!', 0
+#	.byte 0xcc, 0xcc
+#	.quad 6
+#	.quad source
 .text
 _main:
+
+	lea foo(%rip), %rax
+	KN_STR_DEREF %rax, %rsi
+	lea dump(%rip), %rdi
+	jmp abort
+	#xor %ecx, %ecx
+	#movw 4(%rax), %cx
+	#xor %ch, %ch
+	jmp ddebug
+
+.globl _main
+_main1:
 	sub $8, %rsp
 
+# parse command-line
 	call process_arguments
 	mov %rax, %rdi
+# parse program text
 	call kn_parse
 	mov %rax, %rdi
+	call ddebug
+# execute the program
 	call kn_value_run
+# free the returned value
+	mov %rax, %rdi
+	call kn_value_free
+	# todo: do we free the environment as well?
 
 	add $8, %rsp
-	xor %eax, %eax
+	xor %eax, %eax # successful return.
 	ret
 
 # parse command line arguments, returning a `char *`
 # note that the returned value isn't necessarily owned.
 process_arguments:
+	lea source(%rip), %rdi; jmp _strdup # for debugging only
+
 	cmp $3, %rdi
 	jne usage
 	mov 8(%rsi), %rdi

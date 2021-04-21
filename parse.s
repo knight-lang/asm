@@ -1,22 +1,24 @@
 .include "valueh.s"
 #.include "debugh.s"
 
+.equ stream_reg, %r12
+
 .macro peek where:req
-	movzb (%r12), \where
+	movzb (stream_reg), \where
 .endm
 
 .macro advance
-	inc %r12
+	inc stream_reg
 .endm
 
 .macro unadvance
-	dec %r12
+	dec stream_reg
 .endm
 
 .globl kn_parse
 kn_parse:
-	push %r12
-	mov %rdi, %r12
+	push stream_reg
+	mov %rdi, stream_reg
 handle_stream:
 	peek %eax
 	advance
@@ -25,8 +27,8 @@ handle_stream:
 	jmp *(%rcx)
 
 done_parsing:
-	mov %r12, %rdi /* this is used by kn_value_new_function */
-	pop %r12
+	mov stream_reg, %rdi /* this is used by kn_value_new_function */
+	pop stream_reg
 	ret
 
 .equ whitespace, handle_stream
@@ -56,37 +58,86 @@ integer:
 	add %rcx, %rax
 	jmp 0b
 1:
-	NEW_NUMBER %rax
+	KN_NEW_NUMBER %rax
 	ret
 
-# 
-# identifier:
-# 	unadvance
-# 	mov %r12, %rdi
-# 0:
-# 	peek %eax
-# 	advance
-# 	sub $'0', %al
-# 	cmp $9, %rax
-# 	jle 0b
-# 	cmp $('_' - '0'), %al
-# 	jz 0b
-# 	sub $('a' - '0'), %al
-# 	cmp $('z' - 'a'), %rax
-# 	jle 0b
-# 
-# 	mov %r12, %rsi
-# 	sub %rdi, %rsi
-# 	dec %rsi
-# 	call _strndup
-# 	mov %rax, %rdi
-# 	call kn_env_fetch
-# 	kn_vl_new_var %rax
-# 	jmp done_parsing
-# 
-# string:
+identifier:
+	mov -1(stream_reg), %rdi
+0: # parse the identifier
+	peek %eax
+	advance
+	sub $'0', %al
+	cmp $9, %al
+	jle 0b
+	cmp $('_' - '0'), %al
+	jz 0b 
+	sub $('a' - '0'), %al
+	cmp $('z' - 'a'), %al
+	jle 0b
+# fetch the variable
+	mov stream_reg, %rsi
+	sub %rdi, %rsi
+	dec %rsi
+	call kn_env_fetch
+# convert it to a string
+	KN_NEW_VARIABLE %rax
+	jmp done_parsing
+
+string:
+	call die
+
+
+literal_false:
+	xor %eax, %eax
+	jmp strip_literal
+literal_true:
+	mov $KN_TRUE, %eax
+	jmp strip_literal
+literal_null:
+	mov $KN_NULL, %eax
+	# fallthrough
+strip_literal:
+	peek %ecx
+	sub $'A', %cl
+	cmp $('Z' - 'A'), %cl
+	jg done_parsing
+	advance
+	jmp strip_literal
+
+
+
+function_not: 
+function_mod: 
+function_and: 
+function_mul: 
+function_add: 
+function_sub: 
+function_div: 
+function_then: 
+function_lth: 
+function_assign: 
+function_gth: 
+function_eql: 
+function_pow: 
+function_system: 
+function_or: 
+
+function_block: 
+function_debug: 
+function_call: 
+function_eval: 
+function_get: 
+function_length: 
+function_output: 
+function_prompt: 
+function_quit: 
+function_random: 
+function_set: 
+function_while: 
+function_if: 
+	jmp ddebug
 # 	sub $32, %rsp
-# 	mov %r12, (%rsp) /* store quote start */
+# 	mov stream_reg, (%rsp) /* store quote start */
 # 0:
 # 	peek %ecx
 # 	advance
@@ -96,7 +147,7 @@ integer:
 # 	jne 0b
 # 
 # 	/* find the length of the string */
-# 	mov %r12, %rdi
+# 	mov stream_reg, %rdi
 # 	sub (%rsp), %rdi
 # 	dec %rdi
 # 	mov %rdi, 8(%rsp) /* preserve length */
@@ -131,24 +182,6 @@ integer:
 # 	mov %rdi, %rsi
 # 	lea unterminated_quote_msg(%rip), %rdi
 # 	jmp abort
-# 
-# literal_false:
-# 	xor %eax, %eax
-# 	assert_eq $KN_FALSE, %rax
-# 	jmp kw_literal
-# literal_true:
-# 	mov $KN_TRUE, %eax
-# 	jmp kw_literal
-# literal_null:
-# 	mov $KN_NULL, %eax
-# 	/* fallthrough */
-# kw_literal:
-# 	advance
-# 	peek %ecx
-# 	sub $'A', %cl
-# 	cmp $('Z' - 'A'), %rcx
-# 	jle kw_literal
-# 	jmp done_parsing
 # 
 # .macro decl_sym_function label:req
 # function_\label:
@@ -205,11 +238,13 @@ integer:
 # 	push %rax
 # 	jmp kn_value_new_function
 # 
-# /* A token was expected, but could not be found. */
-# expected_token:
-# 	lea expected_token_fmt(%rip), %rdi
-# 	jmp abort
-# 
+
+/* A token was expected, but could not be found. */
+expected_token:
+	lea expected_token_fmt(%rip), %rdi
+	jmp abort
+
+/* an unknown character was character was given. */
 invalid:
 	lea invalid_token_fmt(%rip), %rdi
 	mov %rax, %rsi
