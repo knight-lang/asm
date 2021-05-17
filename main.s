@@ -1,14 +1,41 @@
+.include "valueh.s"
+
 .globl _main
 _main:
-	sub $8, %rsp
+	push %rbx
+
+	# parse command line arguments; the return value is an owned string we can parse.
 	call parse_commandline_args
-	mov %rax, %rdi
-	call _puts
-	add $8, %rsp
+	mov %rax, %rbx
+
+	# Start up Knight.
+	call kn_startup
+
+.ifndef NDEBUG
+	mov $KN_TRUE, %rdi
+	mov $KN_FALSE, %rdi
+	mov $KN_NULL, %rdi
+	mov %rbx, %rdi
+	#KN_NEW_STRING %rdi
+	or $KN_TAG_STRING, %rdi
+	#; KN_NEW_NUMBER %rdi
+	call kn_value_dump
+	pop %rbx
+	xor %eax, %eax
+	ret
+.endif	
+
+	# Run the program.
+	mov %rbx, %rdi
+	call kn_run
+
+	# we ignore the return value, as we're not going to free it.	
+	pop %rbx
 	xor %eax, %eax
 	ret
 
 
+# parse out all command line arguments
 parse_commandline_args:
 	cmp $3, %rdi
 	jne usage
@@ -17,19 +44,19 @@ parse_commandline_args:
 	mov (%rdi), %eax
 	and $0x00ffffff, %eax
 
-	# `\0e-`
+	# we're given `\0e-`
 	cmp $0x00652d, %eax
-	je given
+	jne 0f
+	mov 16(%rsi), %rdi
+	jmp _strdup # gotta dup it so it's on a multiple of 8 boundary
 
+0:
 	# `\0f-`
 	cmp $0x00662d, %eax
 	jne usage
 	mov 16(%rsi), %rdi
 	# call read_file
 	call die
-given:
-	mov 16(%rsi), %rax
-	ret
 
 usage:
 	sub $8, %rsp
