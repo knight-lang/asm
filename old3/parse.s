@@ -52,7 +52,7 @@ integer:
 	peek %ecx
 	sub $'0', %ecx
 	cmp $9, %rcx
-	jg 1f                /* if it's not a digit, then stop */
+	ja 1f                /* if it's not a digit, then stop */
 	advance
 	imul $10, %rax
 	add %rcx, %rax
@@ -68,12 +68,12 @@ identifier:
 	advance
 	sub $'0', %al
 	cmp $9, %al
-	jle 0b
+	jbe 0b
 	cmp $('_' - '0'), %al
-	jz 0b 
+	je 0b 
 	sub $('a' - '0'), %al
 	cmp $('z' - 'a'), %al
-	jle 0b
+	jbe 0b
 # fetch the variable
 	mov stream_reg, %rsi
 	sub %rdi, %rsi
