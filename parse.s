@@ -202,7 +202,7 @@ decl_sym_function system
 decl_sym_function or
 
 decl_kw_function block
-decl_kw_function debug
+decl_kw_function dump
 decl_kw_function call
 decl_kw_function eval
 decl_kw_function get
@@ -342,7 +342,7 @@ parse_table:
 	.quad 	invalid          /* A    */
 	.quad 	function_block   /* B    */
 	.quad 	function_call    /* C    */
-	.quad 	function_debug   /* D    */
+	.quad 	function_dump    /* D    */
 	.quad 	function_eval    /* E    */
 	.quad 	literal_false    /* F    */
 	.quad 	function_get     /* G    */

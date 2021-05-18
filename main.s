@@ -2,7 +2,7 @@
 .include "stringh.s"
 
 .data
-msg:	.asciz "! ''"
+msg:	.asciz "D !! !'abc?123'"
 
 .text
 .globl _main
@@ -23,8 +23,8 @@ _main:
 	mov %rbx, %rdi
 	call kn_run
 
-	mov %rax, %rdi
-	call kn_value_dump
+	#mov %rax, %rdi
+	#call kn_value_dump
 
 	#mov %rax, %rdi
 	#call kn_value_run

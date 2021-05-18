@@ -287,6 +287,7 @@ kn_value_to_boolean:
 	test $KN_TAG_AST, %dil
 	jz 0f
 	push %rbx
+	and $~0b111, %dil
 	run_ast %rdi, call
 	mov %rax, %rdi
 	mov %rax, %rbx
@@ -460,6 +461,7 @@ kn_value_to_boolean:
 .globl kn_value_dump
 kn_value_dump:
 	push %rbx
+	mov %rsp, %rbx
 	# Store the passed argument so we can return it later.
 	mov %rdi, %rbx
 
@@ -496,12 +498,67 @@ kn_value_dump:
 	lea kn_value_dump_string(%rip), %rdi
 	jmp 1f
 0:
+	cmp $KN_TAG_VARIABLE, %al
+	jne 0f
+	mov %rdi, %rsi
+	and $~0b111, %sil
+	mov KN_VAR_OFF_NAME(%rsi), %RSI
+	lea kn_value_dump_variable(%rip), %rdi
+	jmp 1f
+0:
+	cmp $KN_TAG_AST, %al
+	je 0f
 	diem "unknown type to dump"
+0:
+	and $~0b111, %rdi
+	call dump_ast
+	jmp 0f
 1:
 	call _printf
+0:
 	mov %rbx, %rax
+	mov %rsp, %rcx
 	pop %rbx
 	ret
+
+dump_ast:
+        pushq   %rbp
+        movq    %rdi, %rbp
+        pushq   %rbx
+        subq    $8, %rsp
+        movq    8(%rdi), %rax
+        lea      kn_value_dump_ast(%rip), %rdi
+        movsbl  -2(%rax), %esi
+        xorl    %eax, %eax
+        call    _printf
+        movq    8(%rbp), %rax
+        cmpb    $0, -1(%rax)
+        je      .L2
+        xorl    %ebx, %ebx
+.L3:
+        movl    $44, %edi
+        xorl    %eax, %eax
+        call    _putchar
+        movl    $32, %edi
+        xorl    %eax, %eax
+        call    _putchar
+        movl    %ebx, %eax
+        addl    $1, %ebx
+        movq    16(%rbp,%rax,8), %rdi
+        xorl    %eax, %eax
+        call    kn_value_dump
+        movq    8(%rbp), %rax
+        movsbl  -1(%rax), %eax
+        cmpl    %ebx, %eax
+        ja      .L3
+.L2:
+        addq    $8, %rsp
+        movl    $41, %edi
+        xorl    %eax, %eax
+        popq    %rbx
+        popq    %rbp
+        jmp     _putchar
+
 .pushsection .data, ""
 kn_value_dump_null:
 	.asciz "Null()"
@@ -513,6 +570,10 @@ kn_value_dump_true:
 	.asciz "Boolean(true)"
 kn_value_dump_false:
 	.asciz "Boolean(false)"
+kn_value_dump_variable:
+	.asciz "Variable(%s)"
+kn_value_dump_ast:
+	.asciz "Ast(%c"
 .popsection
 
 .globl kn_value_run
@@ -528,7 +589,7 @@ kn_value_run:
 	test $KN_TAG_AST, %al
 	jz 0f
 
-	run_ast %rdi, call
+	run_ast %rdi, jmp
 0:
 	# Now, check if it's a variable. If it is, then simply load its value.
 	cmp $KN_TAG_VARIABLE, %al
