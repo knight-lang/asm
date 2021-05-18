@@ -1,0 +1,1 @@
+.equ KN_VAR_OFF_VAL, 8

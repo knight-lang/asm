@@ -1,4 +1,6 @@
 .include "valueh.s"
+.include "asth.s"
+.include "functionh.s"
 #.include "debugh.s"
 
 .equ stream_reg, %r12
@@ -40,8 +42,8 @@ comment:
 	advance
 	cmp $'\n', %al      /* check to see if we're at end of line */
 	setne %al           /* if we are, set the currently read thing to `0` */
-	cmp $0, %al         /* check if `%al` is zero (ie EOS or `\n` which was replaced) */
-	jne comment         /* nonzero = not end of comment */
+	test %al, %al       /* check if `%al` is zero (ie EOS or `\n` which was replaced) */
+	jnz comment         /* nonzero = not end of comment */
 	jmp handle_stream   /* zero = end of comment */
 
 integer:
@@ -85,11 +87,12 @@ identifier:
 
 string:
 	mov stream_reg, %rdi # keep string start
+	peek %ecx
 0: # parse string
 	peek %ecx
 	advance
 	test %cl, %cl
-	je string_missing_quote
+	jz string_missing_quote
 	cmp %al, %cl
 	jne 0b
 
@@ -97,6 +100,7 @@ string:
  	mov stream_reg, %rsi
  	sub %rdi, %rsi
  	dec %rsi
+
 # allocate the string and return
  	call kn_string_new_borrowed
 	KN_NEW_STRING %rax
@@ -169,140 +173,86 @@ strip_literal:
 	advance
 	jmp strip_literal
 
+.macro decl_sym_function label:req
+function_\label:
+	lea kn_func_\label(%rip), %rdi
+	jmp function
+.endm
 
+.macro decl_kw_function label:req
+function_\label:
+	lea kn_func_\label(%rip), %rdi
+	jmp keyword_function
+.endm
 
-function_not: 
-function_mod: 
-function_and: 
-function_mul: 
-function_add: 
-function_sub: 
-function_div: 
-function_then: 
-function_lth: 
-function_assign: 
-function_gth: 
-function_eql: 
-function_pow: 
-function_system: 
-function_or: 
+decl_sym_function not
+decl_sym_function mod
+decl_sym_function and
+decl_sym_function mul
+decl_sym_function add
+decl_sym_function sub
+decl_sym_function div
+decl_sym_function then
+decl_sym_function lth
+decl_sym_function assign
+decl_sym_function gth
+decl_sym_function eql
+decl_sym_function pow
+decl_sym_function system
+decl_sym_function or
 
-function_block: 
-function_debug: 
-function_call: 
-function_eval: 
-function_get: 
-function_length: 
-function_output: 
-function_prompt: 
-function_quit: 
-function_random: 
-function_set: 
-function_while: 
-function_if: 
-	jmp ddebug
-# 	sub $32, %rsp
-# 	mov stream_reg, (%rsp) /* store quote start */
-# 0:
-# 	peek %ecx
-# 	advance
-# 	cmp $0, %ecx
-# 	je 1f
-# 	cmp %al, %cl
-# 	jne 0b
-# 
-# 	/* find the length of the string */
-# 	mov stream_reg, %rdi
-# 	sub (%rsp), %rdi
-# 	dec %rdi
-# 	mov %rdi, 8(%rsp) /* preserve length */
-# 
-# 	/* allocate it and dereference it */
-# 	call kn_str_alloc
-# 	mov %rax, 16(%rsp)
-# 	mov %rax, %rdi
-# 	call kn_str_deref
-# 
-# 	/* populate the string */
-# 	mov %rax, %rdi    /* the string we jsut allocated */
-# 	mov (%rsp), %rsi  /* quote start */
-# 	mov 8(%rsp), %rdx /* length */
-# 
-# 	/* set trailing NUL */
-# 	mov %rdi, %rax
-# 	add %rdx, %rax
-# 	movb $0, (%rax)
-	# 
-# 	call _memcpy
-# 
-# 	/* return */
-# 	mov 16(%rsp), %rax /* load the allocated string */
-# 	add $32, %rsp
-# 
-# 	kn_vl_new_string %rax
-# 	jmp done_parsing
-# 
-# 1: // An unterminated quote was encountered.
-# 	dec %rdi
-# 	mov %rdi, %rsi
-# 	lea unterminated_quote_msg(%rip), %rdi
-# 	jmp abort
-# 
-# .macro decl_sym_function label:req
-# function_\label:
-# 	lea kn_func_\label(%rip), %rdi
-# 	jmp function
-# .endm
-# 
-# .macro decl_kw_function label:req
-# function_\label:
-# 	lea kn_func_\label(%rip), %rdi
-# 	jmp keyword_function
-# .endm
-# 
-# decl_sym_function not
-# decl_sym_function mod
-# decl_sym_function and
-# decl_sym_function mul
-# decl_sym_function add
-# decl_sym_function sub
-# decl_sym_function div
-# decl_sym_function then
-# decl_sym_function lth
-# decl_sym_function assign
-# decl_sym_function gth
-# decl_sym_function eql
-# decl_sym_function pow
-# decl_sym_function system
-# decl_sym_function or
-# 
-# decl_kw_function block
-# decl_kw_function debug
-# decl_kw_function call
-# decl_kw_function eval
-# decl_kw_function get
-# decl_kw_function length
-# decl_kw_function output
-# decl_kw_function prompt
-# decl_kw_function quit
-# decl_kw_function random
-# decl_kw_function set
-# decl_kw_function while
-# 
-# function_if: // optimization because if is used often.
-# 	lea kn_func_if(%rip), %rdi
-# keyword_function:
-# 	peek %eax
-# 	advance
-# 	sub $'A', %al
-# 	cmp $('Z' - 'A'), %rax
-# 	jle keyword_function
-# 	unadvance
-# function:
-# 	lea done_parsing(%rip), %rax
-# 	push %rax
-# 	jmp kn_value_new_function
-# 
+decl_kw_function block
+decl_kw_function debug
+decl_kw_function call
+decl_kw_function eval
+decl_kw_function get
+decl_kw_function length
+decl_kw_function output
+decl_kw_function prompt
+decl_kw_function quit
+decl_kw_function random
+decl_kw_function set
+decl_kw_function if
+decl_kw_function while
+
+keyword_function:
+	peek %eax
+	advance
+	sub $'A', %al
+	cmp $('Z' - 'A'), %rax
+	jle keyword_function
+	unadvance
+function:
+	lea kn_func_prompt(%rip), %rbx
+	# total jank for the win...
+	push %r13
+	push %r14
+	push %r15
+	sub $8, %rsp
+
+	call kn_ast_alloc
+	mov %rax, %r13
+	mov KN_AST_OFF_FN(%r13), %rax
+	KN_FN_ARITY %rax, %r14
+	lea KN_AST_OFF_ARGS(%r13), %r15
+0:
+	test %r14, %r14
+	jz 0f
+	mov stream_reg, %rdi
+	call kn_parse
+	mov %rdi, %r12
+	mov %rax, (%r15)
+	add $KN_VALUE_SIZE, %r15
+	dec %r14
+	jmp 0b
+0:
+	KN_NEW_AST %r13, %rax
+	add $8, %rsp
+	pop %r15
+	pop %r14
+	pop %r13
+	jmp done_parsing
+
 
 /* A token was expected, but could not be found. */
 expected_token:

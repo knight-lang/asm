@@ -1,33 +1,33 @@
 .include "valueh.s"
+.include "stringh.s"
 
+.data
+msg:	.asciz "! ''"
+
+.text
 .globl _main
 _main:
 	push %rbx
 
 	# parse command line arguments; the return value is an owned string we can parse.
 	call parse_commandline_args
+	.ifndef NDEBUG
+		lea msg(%rip), %rax
+	.endif
 	mov %rax, %rbx
 
 	# Start up Knight.
 	call kn_startup
 
-.ifndef NDEBUG
-	mov $KN_TRUE, %rdi
-	mov $KN_FALSE, %rdi
-	mov $KN_NULL, %rdi
-	mov %rbx, %rdi
-	#KN_NEW_STRING %rdi
-	or $KN_TAG_STRING, %rdi
-	#; KN_NEW_NUMBER %rdi
-	call kn_value_dump
-	pop %rbx
-	xor %eax, %eax
-	ret
-.endif	
-
 	# Run the program.
 	mov %rbx, %rdi
 	call kn_run
+
+	mov %rax, %rdi
+	call kn_value_dump
+
+	#mov %rax, %rdi
+	#call kn_value_run
 
 	# we ignore the return value, as we're not going to free it.	
 	pop %rbx

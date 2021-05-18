@@ -17,10 +17,12 @@ kn_run:
 	call kn_parse
 	mov %rax, %rbx
 
-.ifndef NDEBUG
+.ifndef KN_RECKLESS
 	# Check to see if the result is a valid expression.
 	cmp $KN_UNDEFINED, %rax
+	jne 1f
 	diem "unable to parse stream"
+1:
 .endif
 	# Run the parsed expression.
 	mov %rax, %rdi

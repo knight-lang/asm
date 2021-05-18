@@ -1,5 +1,47 @@
 .include "debugh.s"
 .include "valueh.s"
+.include "stringh.s"
+.include "asth.s"
+.include "envh.s"
+
+.macro run_ast ast:req, func:req, scratch=%r15
+	mov KN_AST_OFF_FN(\ast), \scratch
+	lea KN_AST_OFF_ARGS(\ast), %rdi
+	\func *\scratch
+.endm
+
+.macro run_var var:req, dst=_none
+	.ifc \dst, _none
+		run_var \var, \var
+		.exitm
+	.endif
+
+	mov KN_VAR_OFF_VAL(\var), \dst
+	.ifndef KN_RECKLESS
+		cmp $KN_UNDEFINED, %rax
+		jne run_var_check_result_\@
+		diem "undefined variable accessed"
+	run_var_check_result_\@:
+	.endif
+.endm
+
+
+
+.macro _assert_one_of dst:req, reg:req, kind="", rest1:vararg
+	.ifnb \kind
+		cmp $\kind, \reg
+		je \dst
+		_assert_one_of \dst, \reg, \rest1
+	.endif
+.endm
+
+.macro assert_is_one_of reg:req, rest:vararg
+	.ifndef NDEBUG
+		_assert_one_of assert_kind_one_of_end_\@, \reg, \rest
+		diem "oops: \reg is not one of: \rest"
+	.endif
+assert_kind_one_of_end_\@:
+.endm
 
 // # #include "env.h"    /* kn_variable, kn_variable_run */
 // # #include "ast.h"    /* kn_ast, kn_ast_free, kn_ast_clone, kn_ast_run */
@@ -227,6 +269,76 @@
 // # 	}
 // # }
 // # 
+
+.globl kn_value_to_boolean
+kn_value_to_boolean:
+	# small hack: Anything less than or equal to KN_NULL is false:
+	# FALSE is `0b0000`, zero is `0b0001`, and NULL is `0b0000`
+
+	xor %eax, %eax
+
+	# First, check to see if it's a falsey literal/constant. if so, return that.
+	cmp $KN_NULL, %rdi
+	jg 0f
+	assert_is_one_of %dil, KN_NULL, KN_FALSE, KN_TAG_NUMBER
+	ret
+0:
+	# Next to see if it's an Ast. If it is, then run it, then convert it.
+	test $KN_TAG_AST, %dil
+	jz 0f
+	push %rbx
+	run_ast %rdi, call
+	mov %rax, %rdi
+	mov %rax, %rbx
+	call kn_value_to_boolean
+	# gotta make sure we free the result.
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_value_free
+	mov %rbx, %rax
+	pop %rbx
+	ret
+0:
+	# Now, check to see if it's a number or TRUE. Since we already checked for NULL, FALSE, and 0,
+	# the return value is just true. `0b10` is only ever set for Var/String, so not being set indicates
+	# that we're a constnat or number
+	test $0b10, %dil
+	jnz 0f
+	.ifndef NDEBUG
+		and $0b111, %dil
+		assert_is_one_of %dil, KN_TAG_CONSTANT, KN_TAG_NUMBER
+	.endif
+	inc %eax
+	ret
+0:
+	mov %dil, %cl
+	and $~0b111, %dil
+	# Now we see if we're a variable, and execute it if we are. 
+	.ifndef NDEBUG
+		and $0b111, %cl
+		assert_is_one_of %cl, KN_TAG_AST, KN_TAG_STRING
+	.endif
+	test $0b01, %cl
+	jnz 0f
+
+	# It's a variable! run it and call the function again.
+	push %rbx
+	run_var %rdi
+	mov %rdi, %rbx
+	call kn_value_to_boolean
+	# gotta make sure we free the result.
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_value_free
+	mov %rbx, %rax
+	pop %rbx
+	ret	
+0:
+	# It's a string! this is simply the value at its pointer
+	STRING_PTR %rdi
+	movb (%rdi), %al
+	ret
+
 // # kn_boolean kn_value_to_boolean(kn_value value) {
 // # 	assert(value != KN_UNDEFINED);
 // # 
@@ -344,6 +456,7 @@
 // # }
 // # 
 
+# This is such a hack, and is just here for shiggles
 .globl kn_value_dump
 kn_value_dump:
 	push %rbx
@@ -379,11 +492,10 @@ kn_value_dump:
 	jne 0f
 	mov %rdi, %rsi
 	and $~0b111, %sil
-
+	STRING_PTR %rsi
 	lea kn_value_dump_string(%rip), %rdi
 	jmp 1f
 0:
-	call ddebug
 	diem "unknown type to dump"
 1:
 	call _printf
@@ -401,154 +513,68 @@ kn_value_dump_true:
 	.asciz "Boolean(true)"
 kn_value_dump_false:
 	.asciz "Boolean(false)"
-
 .popsection
-
-// # void kn_value_dump(kn_value value) {
-// # 	switch (KN_TAG(value)) {
-// # 	case KN_TAG_CONSTANT:
-// # 		switch (value) {
-// # 		case KN_TRUE:  printf("Boolean(true)"); return;
-// # 		case KN_FALSE: printf("Boolean(false)"); return;
-// # 		case KN_NULL:  printf("Null()"); return;
-// # #ifndef NDEBUG // we dump undefined only for debugging.
-// # 		case KN_UNDEFINED: printf("<KN_UNDEFINED>"); return;
-// # #endif /* !NDEBUG */
-// # 
-// # 		default:
-// # 			KN_UNREACHABLE();
-// # 		}
-// # 
-// # 	case KN_TAG_NUMBER:
-// # 		printf("Number(%" PRId64 ")", kn_value_as_number(value));
-// # 		return;
-// # 
-// # 	case KN_TAG_STRING:
-// # 		printf("String(%s)", kn_string_deref(kn_value_as_string(value)));
-// # 		return;
-// # 
-// # 	case KN_TAG_VARIABLE:
-// # 		printf("Identifier(%s)", kn_value_as_variable(value)->name);
-// # 		return;
-// # 
-// # #ifdef KN_CUSTOM
-// # 	case KN_TAG_CUSTOM: {
-// # 		struct kn_custom *custom = kn_value_as_custom(value);
-// # 
-// # 		#if (custom->vtable->dump != NULL) {
-// # 			custom->vtable->dump(custom->data);
-// # 		} else {
-// # 			printf(
-// # 				"Custom(%p, %p)", (void *) custom->data, (void *) custom->vtable
-// # 			);
-// # 		}
-// # 
-// # 		return;
-// # 	}
-// # #endif /* KN_CUSTOM */
-// # 
-// # 	case KN_TAG_AST: {
-// # 		struct kn_ast *ast = kn_value_as_ast(value);
-// # 
-// # 		printf("Function(%s", ast->func->name);
-// # 
-// # 		for (size_t i = 0; i < ast->func->arity; ++i) {
-// # 			printf(", ");
-// # 			kn_value_dump(ast->args[i]);
-// # 		}
-// # 
-// # 		printf(")");
-// # 		return;
-// # 	}
-// # 
-// # 	default:
-// # 		KN_UNREACHABLE();
-// # 	}
-// # }
-// # 
-// # kn_value kn_value_run(kn_value value) {
-// # 	assert(value != KN_UNDEFINED);
-// # 
-// # 	switch (KN_EXPECT(KN_TAG(value), KN_TAG_AST)) {
-// # 	case KN_TAG_AST:
-// # 		return kn_ast_run(kn_value_as_ast(value));
-// # 
-// # 	case KN_TAG_VARIABLE:
-// # 		return kn_variable_run(kn_value_as_variable(value));
-// # 
-// # 	case KN_TAG_STRING:
-// # 		return kn_value_new_string(kn_string_clone(kn_value_as_string(value)));
-// # 
-// # 	case KN_TAG_NUMBER:
-// # 	case KN_TAG_CONSTANT:
-// # 		return value;
-// # 
-// # #ifdef KN_CUSTOM
-// # 	case KN_TAG_CUSTOM: {
-// # 		struct kn_custom *custom = kn_value_as_custom(value);
-// # 
-// # 		#if (custom->vtable->run != NULL) {
-// # 			return custom->vtable->run(custom->data);
-// # 		} else {
-// # 			return kn_value_clone(value);
-// # 		}
-// # 	}
-// # #endif /* KN_CUSTOM */
-// # 
-// # 	default:
-// # 		KN_UNREACHABLE();
-// # 	}
-// # }
-// # 
 
 .globl kn_value_run
 kn_value_run:
-	jmp ddebug
+	# Store the argument as the return value. this also allows us to just directly return it if
+	# we have a number or constant.
+	mov %rdi, %rax
 
-.macro _assert_one_of dst:req, reg:req, kind="", rest1:vararg
-    .ifnb \kind
-	cmp $\kind, \reg
-	je \dst
-	_assert_one_of \dst, \reg, \rest1
-    .endif
-.endm
+	# Fetch the type we're given
+	and $~0b111, %dil
 
-.macro assert_kind_one_of reg:req, rest:vararg
-    .ifdef NDEBUG
-	.exitm
-    .endif 
+	# First check to see if it's an Ast. If it is, then run it.
+	test $KN_TAG_AST, %al
+	jz 0f
 
-	_assert_one_of assert_kind_one_of_end_\@, \reg, \rest
-	diem "oops: \reg is not one of: \rest"
-assert_kind_one_of_end_\@:
-.endm
+	run_ast %rdi, call
+0:
+	# Now, check if it's a variable. If it is, then simply load its value.
+	cmp $KN_TAG_VARIABLE, %al
+	jne 0f
+	run_var %rdi, %rax
+	ret
+0:
+	# Now we know it's a constant, string or number, all of which are returned themselves.
+	.ifndef NDEBUG
+		mov %al, %cl
+		and $0b111, %cl
+		assert_is_one_of %cl, KN_TAG_CONSTANT, KN_TAG_STRING, KN_TAG_NUMBER
+	.endif
 
+	# If it's a string, increment its refcount.
+	# technically the string tag is `0b011`, but since we've already take care of `0b010` above,
+	# we know if `0b10` is set, then it's a string.
+	test $0b010, %al
+	jz 0f
+	incl (%rdi)
+0:
+	ret
 
 .globl kn_value_clone
 kn_value_clone:
 	# Find the tag, as well as prepare for returning the passed value.
 	mov %rdi, %rax
-	mov %dil, %cl
-	and $0b111, %cl
+	and $0b111, %dil
 
 	# If it's a constant, number, or variable, just return it as is.
-	cmp $2, %cl
-	jg 0f
-
-	# Make sure it's actually a const, number, or variable
-	assert_kind_one_of %cl, KN_TAG_CONSTANT, KN_TAG_VARIABLE, KN_TAG_NUMBER
-
-	# return the passed value.
-	ret
+	cmp $2, %dil
+	jle 0f
 
 	# Both strings and asts have the refcount in the same position, so cloning them
 	# is simply incrementing a memory index
-0:
-	assert_kind_one_of %cl, KN_TAG_STRING, KN_TAG_AST
-
-	# Increment the `int` at offset four.
+	assert_is_one_of %dil, KN_TAG_STRING, KN_TAG_AST
 	and $~0b111, %dil
-	incl 4(%rdi)
+	incl (%rdi)
+	.ifndef NDEBUG
+		ret # simply return so we don't fall into the assertion down below
+	.endif
+0:
+	# Make sure it's actually a const, number, or variable
+	assert_is_one_of %dil, KN_TAG_CONSTANT, KN_TAG_VARIABLE, KN_TAG_NUMBER
+
+	# return the passed value.
 	ret
 
 .globl kn_value_free
@@ -559,17 +585,30 @@ kn_value_free:
 
 	# If it's a constant, number, or variable, just ignore it.
 	cmp $2, %al
-	jg 0f
-	assert_kind_one_of %al, KN_TAG_CONSTANT, KN_TAG_VARIABLE, KN_TAG_NUMBER
-	ret
-
-	# either free a string or ast.
+	jle 1f
 0:
-	assert_kind_one_of %al, KN_TAG_STRING, KN_TAG_AST
-	# Remove the tag for when we call the child functions.
+	assert_is_one_of %al, KN_TAG_STRING, KN_TAG_AST
+	# Remove the tag for when we call functions.
 	and $~0b111, %dil
 
+	# ensure we don't have a zero refcount
+	.ifndef NDEBUG
+		cmpl $0, (%rdi)
+		jnz 2f
+		diem "attempted to free a string/ast with zero refcount?"
+	2:
+	.endif
+
+	# Both strings and asts have the refcount in the same position, so freeing is just
+	# decrementing the pointer and then checking to see if its zero
+	decl (%rdi)
+	je 0f # if it's zero, then we need to actually free it.
+	ret
+0:
 	# Free the string if we have a string; if not, free the ast.
 	cmp $KN_TAG_STRING, %al
 	je kn_string_free
 	jmp kn_ast_free
+1:
+	assert_is_one_of %al, KN_TAG_CONSTANT, KN_TAG_VARIABLE, KN_TAG_NUMBER
+	ret
