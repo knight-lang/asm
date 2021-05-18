@@ -2,7 +2,7 @@
 .include "stringh.s"
 
 .data
-msg:	.asciz "D !! !'abc?123'"
+msg:	.asciz "O ! 123"
 
 .text
 .globl _main
@@ -22,12 +22,6 @@ _main:
 	# Run the program.
 	mov %rbx, %rdi
 	call kn_run
-
-	#mov %rax, %rdi
-	#call kn_value_dump
-
-	#mov %rax, %rdi
-	#call kn_value_run
 
 	# we ignore the return value, as we're not going to free it.	
 	pop %rbx

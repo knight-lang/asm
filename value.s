@@ -232,6 +232,9 @@ assert_kind_one_of_end_\@:
 // # 	return is_neg ? -ret : ret;
 // # }
 // # 
+.globl kn_value_to_number
+kn_value_to_number:
+
 // # kn_number kn_value_to_number(kn_value value) {
 // # 	assert(value != KN_UNDEFINED);
 // # 
@@ -270,6 +273,114 @@ assert_kind_one_of_end_\@:
 // # }
 // # 
 
+
+
+
+kn_value_to_string_run_var:
+	run_var %rdi
+.globl kn_value_to_string
+kn_value_to_string:
+	# Fetch the tag
+	mov %dil, %cl
+	mov %rdi, %rax
+	and $0b111, %cl
+	and $~0b111, %dil
+
+	# If we're a string (most common case), then increment our refcount and retrn.
+	cmp $KN_TAG_STRING, %cl
+	jne 0f
+	mov %rdi, %rax
+	incl (%rdi)
+	ret # we're given a string so just return it.
+0:
+# If it's a variable, jump to just above the function and try again.
+	cmp $KN_TAG_VARIABLE, %cl
+	je kn_value_to_string_run_var
+0:
+	# If it's an AST, we have to run it, then convert the result to a string.
+	test $KN_TAG_AST, %cl
+	jz 0f
+	push %rbx
+	run_ast %rdi, call
+
+	# If the ast returns a string, just return that directly
+	mov %al, %cl
+	and $0b111, %cl
+	cmp $KN_TAG_STRING, %cl
+	jne 1f
+	pop %rbx
+	ret
+1:
+	# The AST returned a non-string, so we have to run it the long way
+	mov %rax, %rbx
+	mov %rax, %rdi
+	call kn_value_to_string
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_value_free
+	mov %rbx, %rax
+	pop %rbx
+	ret
+0: # either a number or a builtin.
+	# If the value's small enough, we can use the special builtins.
+	cmp $0b11001, %al
+	ja 0f
+	mov %rdi, %rax
+	imul $KN_STR_SIZE, %rax
+	lea kn_value_string_reprs(%rip), %rdi
+	add %rdi, %rax
+	ret
+0:
+	assert_is_one_of %cl, KN_TAG_NUMBER
+	sar $3, %rdi
+	push %rbx
+	mov %rdi, %rbx
+	# TODO optimize this more
+	mov $22, %rdi
+	call xmalloc
+	mov %rbx, %rdx
+	mov %rax, %rdi
+	mov %rax, %rbx
+	lea kn_value_string_sprintf(%rip), %rsi
+	call _sprintf
+	mov %rbx, %rdi
+	call _strlen
+	mov %rax, %rsi
+	mov %rbx, %rdi
+	pop %rbx
+	jmp kn_string_new_owned
+
+.pushsection .data, ""
+kn_value_string_sprintf:        .asciz "%llu"
+kn_value_string_reprs_true:     .asciz "true"
+kn_value_string_reprs_false:    .asciz "false"
+kn_value_string_reprs_null:     .asciz "null"
+kn_value_string_reprs_zero:     .asciz "0"
+kn_value_string_reprs_one:      .asciz "1"
+kn_value_string_reprs_two:      .asciz "2"
+kn_value_string_reprs:
+	.long -2147483648
+	.long 5
+	.quad kn_value_string_reprs_false
+	.long -2147483648
+	.long 1
+	.quad kn_value_string_reprs_zero
+	.zero KN_STR_SIZE*6
+	.long -2147483648
+	.long 4
+	.quad kn_value_string_reprs_null
+	.long -2147483648
+	.long 1
+	.quad kn_value_string_reprs_one
+	.zero KN_STR_SIZE*6
+	.long -2147483648
+	.long 4
+	.quad kn_value_string_reprs_true
+	.long -2147483648
+	.long 1
+	.quad kn_value_string_reprs_two
+.popsection
+
 .globl kn_value_to_boolean
 kn_value_to_boolean:
 	# small hack: Anything less than or equal to KN_NULL is false:
@@ -279,7 +390,7 @@ kn_value_to_boolean:
 
 	# First, check to see if it's a falsey literal/constant. if so, return that.
 	cmp $KN_NULL, %rdi
-	jg 0f
+	ja 0f
 	assert_is_one_of %dil, KN_NULL, KN_FALSE, KN_TAG_NUMBER
 	ret
 0:
@@ -621,7 +732,7 @@ kn_value_clone:
 
 	# If it's a constant, number, or variable, just return it as is.
 	cmp $2, %dil
-	jle 0f
+	jbe 0f
 
 	# Both strings and asts have the refcount in the same position, so cloning them
 	# is simply incrementing a memory index
@@ -646,7 +757,7 @@ kn_value_free:
 
 	# If it's a constant, number, or variable, just ignore it.
 	cmp $2, %al
-	jle 1f
+	jbe 1f
 0:
 	assert_is_one_of %al, KN_TAG_STRING, KN_TAG_AST
 	# Remove the tag for when we call functions.
@@ -663,7 +774,7 @@ kn_value_free:
 	# Both strings and asts have the refcount in the same position, so freeing is just
 	# decrementing the pointer and then checking to see if its zero
 	decl (%rdi)
-	je 0f # if it's zero, then we need to actually free it.
+	jz 0f # if it's zero, then we need to actually free it.
 	ret
 0:
 	# Free the string if we have a string; if not, free the ast.

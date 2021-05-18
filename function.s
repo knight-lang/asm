@@ -1,4 +1,5 @@
 .include "debugh.s"
+.include "stringh.s"
 .include "valueh.s"
 
 .globl kn_function_startup
@@ -74,8 +75,18 @@ define_fn length, 1, 'L'
 	diem "todo: function_length"
 
 define_fn output, 1, 'O'
-	sub $8, %rsp
-	diem "todo: function_output"
+	push %rbx
+	mov (%rdi), %rdi
+	call kn_value_to_string
+	mov %rax, %rdi
+	mov %rax, %rbx
+	STRING_PTR %rdi
+	call _puts
+	mov %rbx, %rdi
+	STRING_FREE %rdi
+	mov $KN_NULL, %eax
+	pop %rbx
+	ret
 
 define_fn dump, 1, 'D'
 	push %rbx
