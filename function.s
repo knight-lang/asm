@@ -81,6 +81,7 @@ define_fn output, 1, 'O'
 	mov %rax, %rdi
 	mov %rax, %rbx
 	STRING_PTR %rdi
+	# TODO: check for trailing slash```
 	call _puts
 	mov %rbx, %rdi
 	STRING_FREE %rdi
@@ -104,6 +105,15 @@ define_fn dump, 1, 'D'
 /* ARITY TWO */
 
 define_fn add, 2, '+'
+	push %rbx
+	mov (%rdi), %rdi
+	call kn_value_to_number
+	mov %rax, %rdi
+	shl $3, %rdi
+	or $1, %rdi
+	call kn_value_dump
+	pop %rbx
+	ret
 	sub $8, %rsp
 	diem "todo: function_add"
 

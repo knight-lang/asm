@@ -82,7 +82,6 @@ identifier:
 	dec %rsi
 	call kn_env_fetch
 # convert it to a string
-	KN_NEW_VARIABLE %rax
 	jmp done_parsing
 
 string:
@@ -166,6 +165,7 @@ literal_null:
 	mov $KN_NULL, %eax
 	# fallthrough
 strip_literal:
+	jmp done_parsing # TODO: PARSE moRE THAN ONE KEYWORD LETTER
 	peek %ecx
 	sub $'A', %cl
 	cmp $('Z' - 'A'), %cl

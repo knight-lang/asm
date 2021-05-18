@@ -2,7 +2,17 @@
 .include "stringh.s"
 
 .data
-msg:	.asciz "O ! 123"
+	.asciz "D + T 0"
+	.asciz "D + F 0"
+	.asciz "D + N 0"
+	.asciz "D + 0 0"
+	.asciz "D + 1 0"
+	.asciz "D + 2 0"
+	.asciz "D + 3 0"
+	.asciz "D + ! ! T 0"
+msg:
+	.asciz "D + a 0"
+
 
 .text
 .globl _main

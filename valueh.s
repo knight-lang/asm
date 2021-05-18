@@ -39,7 +39,7 @@
 .macro KN_NEW_VARIABLE src:req dst=_none
 	# TODO: ensure that `src` is lower 8 bits
 	.ifc \dst, _none
-		inc \src
+		add $2, \src
 	.else
 		lea KN_TAG_VARIABLE(\src), \dst
 	.endif

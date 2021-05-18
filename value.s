@@ -16,7 +16,7 @@
 		.exitm
 	.endif
 
-	mov KN_VAR_OFF_VAL(\var), \dst
+	movq KN_VAR_OFF_VAL(\var), \dst
 	.ifndef KN_RECKLESS
 		cmp $KN_UNDEFINED, %rax
 		jne run_var_check_result_\@
@@ -232,52 +232,62 @@ assert_kind_one_of_end_\@:
 // # 	return is_neg ? -ret : ret;
 // # }
 // # 
+
+
+kn_value_to_number_run_var:
+	run_var %rdi
+	# fallthrough
 .globl kn_value_to_number
 kn_value_to_number:
+	# Fetch the tag
+	mov %dil, %cl
+	and $0b111, %cl
 
-// # kn_number kn_value_to_number(kn_value value) {
-// # 	assert(value != KN_UNDEFINED);
-// # 
-// # 	switch (KN_EXPECT(KN_TAG(value), KN_TAG_NUMBER)) {
-// # 	case KN_TAG_NUMBER:
-// # 		return kn_value_as_number(value);
-// # 
-// # 	case KN_TAG_CONSTANT:
-// # 		return value == KN_TRUE;
-// # 
-// # 	case KN_TAG_STRING:
-// # 		return string_to_number(kn_value_as_string(value));
-// # 
-// # #ifdef KN_CUSTOM
-// # 	case KN_TAG_CUSTOM: {
-// # 		struct kn_custom *custom = kn_value_as_custom(value);
-// # 
-// # 		#if (custom->vtable->to_number != NULL)
-// # 			return custom->vtable->to_number(custom->data);
-// # 		// otherwise, fallthrough
-// # 	}
-// # #endif /* KN_CUSTOM */
-// # 
-// # 	case KN_TAG_VARIABLE:
-// # 	case KN_TAG_AST: {
-// # 		// simply execute the value and call this function again.
-// # 		kn_value ran = kn_value_run(value);
-// # 		kn_number ret = kn_value_to_number(ran);
-// # 		kn_value_free(ran);
-// # 		return ret;
-// # 	}
-// # 
-// # 	default:
-// # 		KN_UNREACHABLE();
-// # 	}
-// # }
-// # 
+	# Optimize for number->number conversions, as they're so likely.
+	cmp $KN_TAG_NUMBER, %cl
+	jne 0f
+	sar $3, %rdi
+	mov %rdi, %rax
+	ret
+0:
+	and $~0b111, %dil
+	# Check for variables next
+	cmp $KN_TAG_VARIABLE, %cl
+	je kn_value_to_number_run_var
 
-
-
+	# string conversions
+	cmp $KN_TAG_STRING, %cl
+	jne 0f
+	STRING_PTR %rdi
+	xor %esi, %esi
+	mov $10, %edx
+	jmp _strtoll
+0:
+	# ast conversions
+	cmp $KN_TAG_AST, %cl
+	jne 0f
+	push %rbx
+	run_ast %rdi, call
+	mov %rax, %rbx
+	mov %rax, %rdi
+	call kn_value_to_number
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_value_free
+	mov %rbx, %rax
+	pop %rbx
+	ret
+0:
+	xor %eax, %eax
+#	assert_is_one_of %cl, $KN_TRUE, $KN_FALSE, $KN_NULL
+	test $KN_TRUE, %dil
+	setne %al
+	ret
 
 kn_value_to_string_run_var:
 	run_var %rdi
+
+	# fallthrough
 .globl kn_value_to_string
 kn_value_to_string:
 	# Fetch the tag
@@ -323,12 +333,13 @@ kn_value_to_string:
 	ret
 0: # either a number or a builtin.
 	# If the value's small enough, we can use the special builtins.
-	cmp $0b11001, %al
+	cmp $0b10001, %al
 	ja 0f
-	mov %rdi, %rax
+	movzb %al, %eax
 	imul $KN_STR_SIZE, %rax
 	lea kn_value_string_reprs(%rip), %rdi
 	add %rdi, %rax
+	incl (%rax) # gotta increase refcount so we can free it later.
 	ret
 0:
 	assert_is_one_of %cl, KN_TAG_NUMBER
@@ -428,7 +439,7 @@ kn_value_to_boolean:
 	# Now we see if we're a variable, and execute it if we are. 
 	.ifndef NDEBUG
 		and $0b111, %cl
-		assert_is_one_of %cl, KN_TAG_AST, KN_TAG_STRING
+		assert_is_one_of %cl, KN_TAG_VARIABLE, KN_TAG_STRING
 	.endif
 	test $0b01, %cl
 	jnz 0f
@@ -613,7 +624,7 @@ kn_value_dump:
 	jne 0f
 	mov %rdi, %rsi
 	and $~0b111, %sil
-	mov KN_VAR_OFF_NAME(%rsi), %RSI
+	lea KN_VAR_OFF_NAME(%rsi), %rsi
 	lea kn_value_dump_variable(%rip), %rdi
 	jmp 1f
 0:
@@ -699,7 +710,6 @@ kn_value_run:
 	# First check to see if it's an Ast. If it is, then run it.
 	test $KN_TAG_AST, %al
 	jz 0f
-
 	run_ast %rdi, jmp
 0:
 	# Now, check if it's a variable. If it is, then simply load its value.
