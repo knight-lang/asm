@@ -1,4 +1,5 @@
 .include "debugh.s"
+.include "envh.s"
 .include "stringh.s"
 .include "valueh.s"
 
@@ -158,12 +159,46 @@ define_fn or, 2, '|'
 	diem "todo: function_or"
 
 define_fn then, 2, ';'
-	sub $8, %rsp
-	diem "todo: function_then"
+	push %rdi
+	mov (%rdi), %rdi
+	call kn_value_run
+	mov %rax, %rdi
+	call kn_value_free
+	pop %rdi
+	mov 8(%rdi), %rdi
+	jmp kn_value_run
 
 define_fn assign, 2, '='
-	sub $8, %rsp
-	diem "todo: function_assign"
+	.ifndef KN_RECKLESS
+		movq (%rdi), %rax
+		and $0b111, %al
+		cmp $KN_TAG_VARIABLE, %al
+		je 1f
+		diem "can only assign to variables"
+	1:
+	.endif
+
+	# Store the variable
+	mov (%rdi), %rcx
+	push %rcx
+
+	# Execute the rhs
+	mov 8(%rdi), %rdi
+	call kn_value_run
+
+	# Store the new result, preserving the old one so we can free it.
+	mov (%rsp), %rcx
+	and $~0b111, %cl # delete its tag
+	mov KN_VAR_OFF_VAL(%rcx), %rdi
+	mov %rax, KN_VAR_OFF_VAL(%rcx)
+	mov %rax, (%rsp)
+
+	# Free the old result
+	call kn_value_free
+
+	# Clone the new result
+	pop %rdi
+	jmp kn_value_clone
 
 define_fn while, 2, 'W'
 	sub $8, %rsp

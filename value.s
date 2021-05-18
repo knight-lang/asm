@@ -754,7 +754,7 @@ kn_value_clone:
 	.endif
 0:
 	# Make sure it's actually a const, number, or variable
-	assert_is_one_of %dil, KN_TAG_CONSTANT, KN_TAG_VARIABLE, KN_TAG_NUMBER
+	assert_is_one_of %cl, KN_TAG_CONSTANT, KN_TAG_VARIABLE, KN_TAG_NUMBER
 
 	# return the passed value.
 	ret
