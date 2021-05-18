@@ -61,3 +61,26 @@
 .macro VALUE_AS_STRING src:req
 	dec \src
 .endm
+
+.macro run_ast ast:req, func:req, scratch=%r15
+	mov KN_AST_OFF_FN(\ast), \scratch
+	lea KN_AST_OFF_ARGS(\ast), %rdi
+	\func *\scratch
+.endm
+
+.macro run_var var:req, dst=_none
+	.ifc \dst, _none
+		run_var \var, \var
+		.exitm
+	.endif
+
+	movq KN_VAR_OFF_VAL(\var), \dst
+
+	.ifndef KN_RECKLESS
+		cmp $KN_UNDEFINED, \dst
+		jne run_var_check_result_\@
+		diem "undefined variable accessed"
+	run_var_check_result_\@:
+	.endif
+.endm
+

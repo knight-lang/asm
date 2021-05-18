@@ -1,12 +1,17 @@
 .include "debugh.s"
+.include "asth.s"
 .include "envh.s"
 .include "stringh.s"
 .include "valueh.s"
 
 .globl kn_function_startup
 kn_function_startup:
-	# todo
-	ret
+	sub $8, %rsp
+	xor %edi, %edi
+	call _time
+	mov %rax, %rdi
+	add $8, %rsp
+	jmp _srand
 
 .macro define_fn name:req, arity:req, chr:req
 	.align 8
@@ -25,7 +30,10 @@ define_fn prompt, 0, 'P'
 
 define_fn random, 0, 'R'
 	sub $8, %rsp
-	diem "todo: function_random"
+	call _rand
+	add $8, %rsp
+	KN_NEW_NUMBER %rax
+	ret
 
 /* ARITY ONE */
 
@@ -33,13 +41,65 @@ define_fn eval, 1, 'E'
 	sub $8, %rsp
 	diem "todo: function_eval"
 
+define_fn noop, 1, ':' # this is never actually parsed, but is used by `BLOCK`
+	mov (%rdi), %rdi
+	jmp kn_value_run
+
 define_fn block, 1, 'B'
-	sub $8, %rsp
-	diem "todo: function_block"
+# Optimization: the vast majority of the time, `BLOCK` is called with an AST already.
+# So, if it's not called with an AST, we just convert its value into an AST. That way, `CALL` has
+# an easier time running stuff.
+	mov (%rdi), %rax
+
+	test $KN_TAG_AST, %al
+	jz 0f
+	incl (-KN_TAG_AST + KN_AST_OFF_RC)(%rax) # TODO: Do we _need_ to clone the ast? (or free it in CALL)
+	ret
+0:
+	# we're not an AST.
+	push %rdi
+	lea kn_func_noop(%rip), %rdi
+	call kn_ast_alloc
+	pop %rdi
+	mov (%rdi), %rcx
+	mov %rcx, KN_AST_OFF_ARGS(%rax)
+	mov %rax, (%rdi) # make it so any further calls to this will give us this block
+	incl KN_AST_OFF_RC(%rax) # TODO: Do we _need_ to clone the ast? (or free it in CALL)
+	or $4, %al
+	ret
 
 define_fn call, 1, 'C'
-	sub $8, %rsp
-	diem "todo: function_call"
+	# execute the first value.
+	mov (%rdi), %rdi
+	push %rbx
+	call kn_value_run
+
+	.ifndef KN_RECKLESS
+		test $KN_TAG_AST, %al
+		jnz 0f
+		diem "can only CALL 'BLOCK' return values."
+	0:
+	.endif
+
+	# since we can only run `BLOCK` return values, which always returns ASTs, we can assume we're given an AST.
+	lea (-KN_TAG_AST)(%rax), %rbx
+	mov %rbx, %rdi
+	run_ast %rdi, call
+
+	# Next, decrease the refcount on the AST, freeing it if necessary.
+	decl (%rbx)
+	jz 0f
+	# whelp, we don't need to free it, we're return the new value.
+	pop %rbx
+	ret
+0:
+	# looks like we gotta free the ast before returning
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_ast_free
+	mov %rbx, %rax
+	pop %rbx
+	ret
 
 define_fn system, 1, '`'
 	sub $8, %rsp
@@ -47,7 +107,10 @@ define_fn system, 1, '`'
 
 define_fn quit, 1, 'Q'
 	sub $8, %rsp
-	diem "todo: function_quit"
+	mov (%rdi), %rdi
+	call kn_value_to_number
+	mov %rax, %rdi
+	call _exit
 
 define_fn not, 1, '!'
 	# load the value to convert
@@ -55,16 +118,6 @@ define_fn not, 1, '!'
 	sub $8, %rsp
 	call kn_value_to_boolean
 	add $8, %rsp
-	.ifndef NDEBUG
-		mov %al, %cl
-		xor %al, %al
-		test %rax, %rax
-		jz 0f
-		diem "`kn_value_to_boolean` returned a non-single-byte value"
-	0:
-		mov %cl, %al
-	.endif
-
 	# bit twiddle the return value.
 	test %al, %al
 	setz %al
@@ -106,17 +159,34 @@ define_fn dump, 1, 'D'
 /* ARITY TWO */
 
 define_fn add, 2, '+'
-	push %rbx
+	push %rdi
+	# run the value
 	mov (%rdi), %rdi
+	call kn_value_run
+
+	# check to see if we have a string
+	mov %al, %cl
+	and $0b111, %cl
+	cmp $2, %cl
+	jne 0f
+
+	# We have a string, add the strings together.
+	call ddebug
+0:
+	# Swap the previous value and the new one.
+	mov (%rsp), %rdi
+	mov %rax, (%rsp)
+	mov 8(%rdi), %rdi
+
+	# convert the RHS to a number
 	call kn_value_to_number
-	mov %rax, %rdi
-	shl $3, %rdi
-	or $1, %rdi
-	call kn_value_dump
-	pop %rbx
+	pop %rdi
+	sar $3, %rdi
+
+	add %rdi, %rax
+	shl $3, %rax
+	or $KN_TAG_NUMBER, %al
 	ret
-	sub $8, %rsp
-	diem "todo: function_add"
 
 define_fn sub, 2, '-'
 	sub $8, %rsp
