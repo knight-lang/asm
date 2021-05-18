@@ -17,8 +17,9 @@
 	.endif
 
 	movq KN_VAR_OFF_VAL(\var), \dst
+
 	.ifndef KN_RECKLESS
-		cmp $KN_UNDEFINED, %rax
+		cmp $KN_UNDEFINED, \dst
 		jne run_var_check_result_\@
 		diem "undefined variable accessed"
 	run_var_check_result_\@:
@@ -236,6 +237,7 @@ assert_kind_one_of_end_\@:
 
 kn_value_to_number_run_var:
 	run_var %rdi
+
 	# fallthrough
 .globl kn_value_to_number
 kn_value_to_number:
@@ -286,7 +288,6 @@ kn_value_to_number:
 
 kn_value_to_string_run_var:
 	run_var %rdi
-
 	# fallthrough
 .globl kn_value_to_string
 kn_value_to_string:
@@ -624,7 +625,7 @@ kn_value_dump:
 	jne 0f
 	mov %rdi, %rsi
 	and $~0b111, %sil
-	lea KN_VAR_OFF_NAME(%rsi), %rsi
+	mov KN_VAR_OFF_NAME(%rsi), %rsi
 	lea kn_value_dump_variable(%rip), %rdi
 	jmp 1f
 0:
@@ -703,6 +704,7 @@ kn_value_run:
 	# Store the argument as the return value. this also allows us to just directly return it if
 	# we have a number or constant.
 	mov %rdi, %rax
+	mov %dil, %cl
 
 	# Fetch the type we're given
 	and $~0b111, %dil
@@ -713,22 +715,19 @@ kn_value_run:
 	run_ast %rdi, jmp
 0:
 	# Now, check if it's a variable. If it is, then simply load its value.
-	cmp $KN_TAG_VARIABLE, %al
+	and $0b111, %cl
+	cmp $KN_TAG_VARIABLE, %cl
 	jne 0f
 	run_var %rdi, %rax
 	ret
 0:
 	# Now we know it's a constant, string or number, all of which are returned themselves.
-	.ifndef NDEBUG
-		mov %al, %cl
-		and $0b111, %cl
-		assert_is_one_of %cl, KN_TAG_CONSTANT, KN_TAG_STRING, KN_TAG_NUMBER
-	.endif
+	assert_is_one_of %cl, KN_TAG_CONSTANT, KN_TAG_STRING, KN_TAG_NUMBER
 
 	# If it's a string, increment its refcount.
 	# technically the string tag is `0b011`, but since we've already take care of `0b010` above,
 	# we know if `0b10` is set, then it's a string.
-	test $0b010, %al
+	test $0b010, %cl
 	jz 0f
 	incl (%rdi)
 0:
@@ -738,15 +737,16 @@ kn_value_run:
 kn_value_clone:
 	# Find the tag, as well as prepare for returning the passed value.
 	mov %rdi, %rax
-	and $0b111, %dil
+	mov %dil, %cl
+	and $0b111, %cl
 
 	# If it's a constant, number, or variable, just return it as is.
-	cmp $2, %dil
+	cmp $2, %cl
 	jbe 0f
 
 	# Both strings and asts have the refcount in the same position, so cloning them
 	# is simply incrementing a memory index
-	assert_is_one_of %dil, KN_TAG_STRING, KN_TAG_AST
+	assert_is_one_of %cl, KN_TAG_STRING, KN_TAG_AST
 	and $~0b111, %dil
 	incl (%rdi)
 	.ifndef NDEBUG

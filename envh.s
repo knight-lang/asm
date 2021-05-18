@@ -1,2 +1,4 @@
 .equ KN_VAR_OFF_VAL, 0
 .equ KN_VAR_OFF_NAME, 8
+.equ KN_VAR_SIZE, 16
+

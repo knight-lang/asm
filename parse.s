@@ -64,7 +64,7 @@ integer:
 	ret
 
 identifier:
-	mov -1(stream_reg), %rdi
+	lea -1(stream_reg), %rdi
 0: # parse the identifier
 	peek %eax
 	advance
