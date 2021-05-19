@@ -15,7 +15,7 @@ kn_string_new_owned:
 	mov $16, %rdi
 	call xmalloc
 
-	mov %r12d, KN_STR_OFF_LEN(%rax) # length
+	movl %r12d, KN_STR_OFF_LEN(%rax) # length
 	movl $1, KN_STR_OFF_RC(%rax) # refcount
 	mov %rbx, KN_STR_OFF_PTR(%rax) # ptr
 	pop %r12

@@ -210,7 +210,6 @@ assert_kind_one_of_end_\@:
 // # }
 // # 
 
-
 kn_value_to_number_run_var:
 	run_var %rdi
 
@@ -339,7 +338,7 @@ kn_value_to_string:
 	jmp kn_string_new_owned
 
 .pushsection .data, ""
-kn_value_string_sprintf:        .asciz "%llu"
+kn_value_string_sprintf:        .asciz "%lld"
 kn_value_string_reprs_true:     .asciz "true"
 kn_value_string_reprs_false:    .asciz "false"
 kn_value_string_reprs_null:     .asciz "null"

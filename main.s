@@ -11,7 +11,7 @@
 	.asciz "D + 3 0"
 	.asciz "D + ! ! T 0"
 msg:
-	.asciz "D + 1 '12'"
+	.asciz "D L - 1 '12'"
 
 
 .text

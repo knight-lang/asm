@@ -125,8 +125,19 @@ define_fn not, 1, '!'
 	ret
 
 define_fn length, 1, 'L'
-	sub $8, %rsp
-	diem "todo: function_length"
+	push %rbx
+	mov (%rdi), %rdi
+	call kn_value_to_string
+	mov KN_STR_OFF_LEN(%rax), %ebx
+	decl KN_STR_OFF_RC(%rax)
+	jnz 0f
+	mov %rax, %rdi
+	call kn_string_free
+0:
+	KN_NEW_NUMBER %rbx, %rax
+	pop %rbx
+	ret
+
 
 define_fn output, 1, 'O'
 	push %rbx
@@ -159,10 +170,14 @@ define_fn dump, 1, 'D'
 /* ARITY TWO */
 
 define_fn add, 2, '+'
-	push %rdi
+	push 8(%rdi)
 	# run the value
 	mov (%rdi), %rdi
 	call kn_value_run
+
+	# Swap the previous value and the new one.
+	mov (%rsp), %rdi
+	mov %rax, (%rsp)
 
 	# check to see if we have a string
 	mov %al, %cl
@@ -170,27 +185,37 @@ define_fn add, 2, '+'
 	cmp $2, %cl
 	jne 0f
 
-	# We have a string, add the strings together.
+	# We have a string, convert rhs to a string and add.
+	call kn_value_to_string
+#	STRING_PTR 
+#	mov (%rsp), 
 	call ddebug
 0:
-	# Swap the previous value and the new one.
-	mov (%rsp), %rdi
-	mov %rax, (%rsp)
-	mov 8(%rdi), %rdi
-
-	# convert the RHS to a number
+	# we don't have a string, convert rhs to a number and add.
 	call kn_value_to_number
 	pop %rdi
 	sar $3, %rdi
-
 	add %rdi, %rax
-	shl $3, %rax
-	or $KN_TAG_NUMBER, %al
+	KN_NEW_NUMBER %rax
 	ret
 
 define_fn sub, 2, '-'
-	sub $8, %rsp
-	diem "todo: function_sub"
+	push 8(%rdi)
+	# run the value
+	mov (%rdi), %rdi
+	call kn_value_to_number
+
+	# Swap the previous value and the new one.
+	mov (%rsp), %rdi
+	mov %rax, (%rsp)
+
+	# we don't have a string, convert rhs to a number and add.
+	call kn_value_to_number
+	pop %rdi
+	sub %rax, %rdi
+	KN_NEW_NUMBER %rdi, %rax
+	ret
+
 
 define_fn mul, 2, '*'
 	sub $8, %rsp
