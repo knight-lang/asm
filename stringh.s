@@ -6,13 +6,19 @@
 
 .macro STRING_PTR src:req, dst=_none
 	.ifc \dst, _none
-		movq KN_STR_OFF_PTR(\src), \src
-	.else
-		movq KN_STR_OFF_PTR(\src), \dst
+		STRING_PTR \src, \src
+		.exitm
 	.endif
+
+	movq KN_STR_OFF_PTR(\src), \dst
 .endm
 
-.macro STRING_LEN src:req, dst=\src
+.macro STRING_LEN src:req, dst=_none
+	.ifc \dst, _none
+		STRING_LEN \src, \src
+		.exitm
+	.endif
+
 	movl KN_STR_OFF_LEN(\src), \dst
 .endm
 

@@ -3,6 +3,15 @@
 
 # So for now, strings are literally just:
 # struct kn_string { unsigned length, refcount; char *ptr; }
+.globl kn_string_malloc
+kn_string_malloc:
+	push %rdi
+	inc %rdi
+	call xmalloc
+	mov %rax, %rdi
+	pop %rsi
+	# fallthrough
+
 .globl kn_string_new_owned
 kn_string_new_owned:
 	sub $8, %rsp

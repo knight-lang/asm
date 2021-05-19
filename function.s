@@ -138,21 +138,58 @@ define_fn length, 1, 'L'
 	pop %rbx
 	ret
 
-
 define_fn output, 1, 'O'
 	push %rbx
+	# convert the input to a string
 	mov (%rdi), %rdi
 	call kn_value_to_string
-	mov %rax, %rdi
+	# Store the return value so we can free it later.
 	mov %rax, %rbx
-	STRING_PTR %rdi
-	# TODO: check for trailing slash```
+
+	# If the length is zero, we just put a newline and are done.
+	STRING_LEN %rax, %esi
+	test %rsi, %rsi
+	jz .kn_output_just_newline
+
+	# Otherwise, now check for the trailing newline.
+	STRING_PTR %rax, %rdi
+	dec %rsi
+	mov (%rdi, %rsi), %cl
+	cmp $'\\', %cl
+	je .kn_output_no_slash
+
+	# we don't have a trailing newline, just `puts` it.
 	call _puts
-	mov %rbx, %rdi
-	STRING_FREE %rdi
-	mov $KN_NULL, %eax
+.kn_output_free_string:
+	decl KN_STR_OFF_RC(%rbx)
+	jz 0f
+	# it's not zero, we're done.
 	pop %rbx
+	mov $KN_NULL, %eax
 	ret
+0:
+	# it's zero, we gotta free it
+	mov %rbx, %rdi
+	call kn_string_free
+	pop %rbx
+	mov $KN_NULL, %EAX
+	ret
+.kn_output_no_slash:
+	# Ok, now we gotta print it without the trailing newline.
+	diem "todo: print without trailing newline. (%esi is length, %rdi is pointer)"
+	jmp .kn_output_free_string
+.kn_output_just_newline:
+	# we don't need to free the string, as the string is the empty string.
+	mov $'\n', %dil
+	call _putchar
+	pop %rbx
+	mov $KN_NULL, %eax
+	ret
+/*
+     size_t
+     fwrite(const void *restrict ptr, size_t size, size_t nitems, FILE *restrict stream);
+*/
+
 
 define_fn dump, 1, 'D'
 	push %rbx
@@ -170,30 +207,65 @@ define_fn dump, 1, 'D'
 /* ARITY TWO */
 
 define_fn add, 2, '+'
-	push 8(%rdi)
+	push %rbx
+	mov 8(%rdi), %rbx
+
 	# run the value
 	mov (%rdi), %rdi
 	call kn_value_run
 
 	# Swap the previous value and the new one.
-	mov (%rsp), %rdi
-	mov %rax, (%rsp)
+	mov %rbx, %rdi
+	mov %rax, %rbx
 
 	# check to see if we have a string
 	mov %al, %cl
 	and $0b111, %cl
-	cmp $2, %cl
-	jne 0f
+	cmp $KN_TAG_STRING, %cl
+	jne .kn_func_add_numebrs
+	and $~0b111, %bl
 
-	# We have a string, convert rhs to a string and add.
+	# We have a string, convert rhs to a string.
 	call kn_value_to_string
-#	STRING_PTR 
-#	mov (%rsp), 
-	call ddebug
-0:
-	# we don't have a string, convert rhs to a number and add.
+	push %r12
+	push %r13
+	mov %rax, %r12
+
+	# (In the future, we could look up the hashed value.)
+	# Compute the new length and malloc it.
+	mov KN_STR_OFF_LEN(%rbx), %edi
+	add KN_STR_OFF_LEN(%rax), %edi
+	call kn_string_malloc
+	mov %rax, %r13
+
+	# Concat concat the first string.
+	STRING_PTR %rax, %rdi
+	STRING_PTR %rbx, %rsi
+	mov KN_STR_OFF_LEN(%rbx), %ebx # note it's not `+1`, so we omit railing newline
+	mov %ebx, %edx
+	call _memcpy
+
+	# Cocnat the second string
+	mov %rax, %rdi
+	add %rbx, %rdi
+	STRING_PTR %r12, %rsi
+	mov KN_STR_OFF_LEN(%r12), %edx
+	inc %edx # +1 so we copy trailing `\0`
+	call _memcpy
+
+	# TODO: free the input strings...
+
+	KN_NEW_STRING %r13, %rax
+	pop %r13
+	pop %r12
+	pop %rbx
+	ret
+
+.kn_func_add_numebrs:
+	# we convert rhs to a number and perform the operation
 	call kn_value_to_number
-	pop %rdi
+	mov %rbx, %rdi
+	pop %rbx
 	sar $3, %rdi
 	add %rdi, %rax
 	KN_NEW_NUMBER %rax
@@ -203,13 +275,14 @@ define_fn sub, 2, '-'
 	push 8(%rdi)
 	# run the value
 	mov (%rdi), %rdi
+	# jmp ddebug
 	call kn_value_to_number
 
 	# Swap the previous value and the new one.
 	mov (%rsp), %rdi
 	mov %rax, (%rsp)
 
-	# we don't have a string, convert rhs to a number and add.
+	# we convert rhs to a number and perform the operation
 	call kn_value_to_number
 	pop %rdi
 	sub %rax, %rdi
@@ -218,20 +291,81 @@ define_fn sub, 2, '-'
 
 
 define_fn mul, 2, '*'
-	sub $8, %rsp
-	diem "todo: function_mul"
+	push 8(%rdi)
+	# run the value
+	mov (%rdi), %rdi
+	call kn_value_to_number
+
+	# Swap the previous value and the new one.
+	mov (%rsp), %rdi
+	mov %rax, (%rsp)
+
+	# we convert rhs to a number and perform the operation
+	call kn_value_to_number
+	pop %rdi
+	imul %rax, %rdi
+	KN_NEW_NUMBER %rdi, %rax
+	ret
 
 define_fn div, 2, '/'
-	sub $8, %rsp
-	diem "todo: function_div"
+	push 8(%rdi)
+	# run the value
+	mov (%rdi), %rdi
+	call kn_value_to_number
+
+	# Swap the previous value and the new one.
+	mov (%rsp), %rdi
+	mov %rax, (%rsp)
+
+	# we convert rhs to a number and perform the operation
+	call kn_value_to_number
+	mov %rax, %rsi
+	pop %rax
+	cqto
+	idiv %rsi
+	KN_NEW_NUMBER %rax
+	ret
 
 define_fn mod, 2, '%'
-	sub $8, %rsp
-	diem "todo: function_mod"
+	push 8(%rdi)
+	# run the value
+	mov (%rdi), %rdi
+	call kn_value_to_number
+
+	# Swap the previous value and the new one.
+	mov (%rsp), %rdi
+	mov %rax, (%rsp)
+
+	# we convert rhs to a number and perform the operation
+	call kn_value_to_number
+	mov %rax, %rsi
+	pop %rax
+	cltd
+	idiv %rsi
+	KN_NEW_NUMBER %rdx, %rax # %rdx is the div output.
+	ret
 
 define_fn pow, 2, '^'
-	sub $8, %rsp
-	diem "todo: function_pow"
+	push 8(%rdi)
+	# run the value
+	mov (%rdi), %rdi
+	call kn_value_to_number
+
+	# Swap the previous value and the new one.
+	mov (%rsp), %rdi
+	mov %rax, (%rsp)
+
+	# we don't have a string, convert rhs to a number and add.
+	call kn_value_to_number
+        pxor %xmm0, %xmm0
+        pxor %xmm1, %xmm1
+        cvtsi2sdq (%rsp), %xmm0
+        cvtsi2sdq %rax, %xmm1
+        call _pow
+        cvttsd2siq %xmm0, %rax
+	KN_NEW_NUMBER %rax
+	pop %rcx
+        ret
 
 define_fn lth, 2, '<'
 	sub $8, %rsp
@@ -254,13 +388,12 @@ define_fn or, 2, '|'
 	diem "todo: function_or"
 
 define_fn then, 2, ';'
-	push %rdi
+	push 8(%rdi)
 	mov (%rdi), %rdi
 	call kn_value_run
 	mov %rax, %rdi
 	call kn_value_free
 	pop %rdi
-	mov 8(%rdi), %rdi
 	jmp kn_value_run
 
 define_fn assign, 2, '='
@@ -296,6 +429,19 @@ define_fn assign, 2, '='
 	jmp kn_value_clone
 
 define_fn while, 2, 'W'
+#	sub $8, %rsp
+#	push (%rdi)
+#	push 8(%rdi)
+#0:
+#	# Covnert the first argument to 
+#	mov (%rsp), %rdi
+#	call kn_value_to_boolean
+#	test %al, %al
+#	jz 0f
+#
+#	mov 
+#0:
+#	mov $KN_NULL, %rax
 	sub $8, %rsp
 	diem "todo: function_while"
 
@@ -308,8 +454,12 @@ define_fn get, 3, 'G'
 
 
 define_fn if, 3, 'I'
-	sub $8, %rsp
-	diem "todo: function_if"
+	push %rdi
+	mov (%rdi), %rdi
+	call kn_value_to_boolean
+	pop %rdi
+	mov 8(%rdi,%rax,8), %rdi
+	jmp kn_value_run
 
 /* ARITY FOUR */
 

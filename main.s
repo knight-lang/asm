@@ -11,7 +11,7 @@
 	.asciz "D + 3 0"
 	.asciz "D + ! ! T 0"
 msg:
-	.asciz "D L - 1 '12'"
+	.asciz "D ^ 3 4"
 
 
 .text
@@ -22,8 +22,9 @@ _main:
 	# parse command line arguments; the return value is an owned string we can parse.
 	call parse_commandline_args
 	.ifndef NDEBUG
-		lea msg(%rip), %rax
+		#lea msg(%rip), %rax
 	.endif
+
 	mov %rax, %rbx
 
 	# Start up Knight.

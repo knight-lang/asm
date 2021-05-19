@@ -275,17 +275,16 @@ kn_value_to_string:
 	# If we're a string (most common case), then increment our refcount and retrn.
 	cmp $KN_TAG_STRING, %cl
 	jne 0f
-	mov %rdi, %rax
 	incl KN_STR_OFF_RC(%rdi)
+	and $~0b111, %al
 	ret # we're given a string so just return it.
 0:
 # If it's a variable, jump to just above the function and try again.
 	cmp $KN_TAG_VARIABLE, %cl
 	je kn_value_to_string_run_var
-0:
 	# If it's an AST, we have to run it, then convert the result to a string.
 	test $KN_TAG_AST, %cl
-	jz 0f
+	jz .kn_value_to_string_number_builtin
 	push %rbx
 	run_ast %rdi, call
 
@@ -294,6 +293,7 @@ kn_value_to_string:
 	and $0b111, %cl
 	cmp $KN_TAG_STRING, %cl
 	jne 1f
+	and $~0b111, %al
 	pop %rbx
 	ret
 1:
@@ -307,17 +307,17 @@ kn_value_to_string:
 	mov %rbx, %rax
 	pop %rbx
 	ret
-0: # either a number or a builtin.
+.kn_value_to_string_number_builtin: # either a number or a builtin.
 	# If the value's small enough, we can use the special builtins.
-	cmp $0b10001, %al
-	ja 0f
+	cmp $0b10001, %rax
+	ja .kn_value_to_string_number
 	movzb %al, %eax
 	imul $KN_STR_SIZE, %rax
 	lea kn_value_string_reprs(%rip), %rdi
 	add %rdi, %rax
 	incl (%rax) # gotta increase refcount so we can free it later.
 	ret
-0:
+.kn_value_to_string_number:
 	assert_is_one_of %cl, KN_TAG_NUMBER
 	sar $3, %rdi
 	push %rbx
