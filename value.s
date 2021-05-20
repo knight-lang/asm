@@ -435,7 +435,8 @@ kn_value_to_boolean:
 0:
 	# It's a string! this is simply the value at its pointer
 	STRING_PTR %rdi
-	movb (%rdi), %al
+	cmpb $0, (%rdi)
+	setne %al
 	ret
 
 // # kn_boolean kn_value_to_boolean(kn_value value) {

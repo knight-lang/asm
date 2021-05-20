@@ -62,7 +62,7 @@
 	dec \src
 .endm
 
-.macro run_ast ast:req, func:req, scratch=%r15
+.macro run_ast ast:req, func:req, scratch=%r8
 	mov KN_AST_OFF_FN(\ast), \scratch
 	lea KN_AST_OFF_ARGS(\ast), %rdi
 	\func *\scratch
