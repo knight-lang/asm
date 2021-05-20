@@ -165,12 +165,11 @@ literal_null:
 	mov $KN_NULL, %eax
 	# fallthrough
 strip_literal:
-	jmp done_parsing
 	# jmp done_parsing # TODO: parse more than one keyword letter
 	peek %ecx
 	sub $'A', %cl
 	cmp $('Z' - 'A'), %cl
-	jg done_parsing
+	ja done_parsing
 	advance
 	jmp strip_literal
 

@@ -658,7 +658,7 @@ define_fn and, 2, '&'
 
 	# it's quite likely for `&` to have the first field be a boolean.
 	test %rax, %rax
-	jnz 0f # If it's false just return that.
+	jnz 0f # Inf it's false just return that.
 	ret
 0:
 	cmp $KN_TRUE, %rax
@@ -692,10 +692,10 @@ define_fn or, 2, '|'
 	pop %rdi
 
 	# it's quite likely for `|` to have the first field be a boolean.
-	cmp $KN_TRUE, %rax
-	je kn_value_run
 	test %rax, %rax
-	jnz .kn_func_or_non_boolean
+	jz kn_value_run
+	cmp $KN_TRUE, %rax
+	kn_output_just_newline .kn_func_or_non_boolean
 	ret
 
 # We're dealing with a non-boolean for the first value, so we have a bit more to do, eg freeing it.
