@@ -1,18 +1,6 @@
 .include "valueh.s"
 .include "stringh.s"
-
-.data
-	.asciz "D + T 0"
-	.asciz "D + F 0"
-	.asciz "D + N 0"
-	.asciz "D + 0 0"
-	.asciz "D + 1 0"
-	.asciz "D + 2 0"
-	.asciz "D + 3 0"
-	.asciz "D + ! ! T 0"
-msg:
-	.asciz "D ^ 3 4"
-
+.include "debugh.s"
 
 .text
 .globl _main
@@ -21,9 +9,6 @@ _main:
 
 	# parse command line arguments; the return value is an owned string we can parse.
 	call parse_commandline_args
-	.ifndef NDEBUG
-		#lea msg(%rip), %rax
-	.endif
 
 	mov %rax, %rbx
 

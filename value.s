@@ -753,6 +753,7 @@ kn_value_free:
 	.ifndef NDEBUG
 		cmpl $0, (%rdi)
 		jnz 2f
+		ret # TODO: THIS
 		diem "attempted to free a string/ast with zero refcount?"
 	2:
 	.endif

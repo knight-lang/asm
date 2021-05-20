@@ -10,7 +10,6 @@ die:
 	mov $1, %rdi
 	jmp _exit
 
-
 .globl xmalloc
 xmalloc:
 	sub $8, %rsp

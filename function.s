@@ -695,7 +695,7 @@ define_fn or, 2, '|'
 	test %rax, %rax
 	jz kn_value_run
 	cmp $KN_TRUE, %rax
-	kn_output_just_newline .kn_func_or_non_boolean
+	jnz .kn_func_or_non_boolean
 	ret
 
 # We're dealing with a non-boolean for the first value, so we have a bit more to do, eg freeing it.
@@ -815,16 +815,18 @@ define_fn while, 2, 'W'
 	jmp .kn_func_while_nonasts
 
 /* ARITY THREE */
+
 define_fn get, 3, 'G'
 	sub $8, %rsp
 	diem "todo: function_get"
-
 
 define_fn if, 3, 'I'
 	push %rdi
 	mov (%rdi), %rdi
 	call kn_value_to_boolean
 	pop %rdi
+	neg %al
+	inc %al
 	mov 8(%rdi,%rax,8), %rdi
 	jmp kn_value_run
 

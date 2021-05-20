@@ -1,7 +1,7 @@
 .include "valueh.s"
 .include "asth.s"
 .include "functionh.s"
-#.include "debugh.s"
+.include "debugh.s"
 
 .equ stream_reg, %r12
 
