@@ -603,31 +603,13 @@ define_fn eql, 2, '?'
 	# Run LHS then RHS.
 	mov (%rdi), %rdi
 	call kn_value_run
-	.ifndef KN_RECKLESS
-		mov %al, %dil
-		and $0b111, %dil
-		cmp $KN_TAG_AST, %dil
-		je 4f
-		cmp $KN_TAG_VARIABLE, %dil
-		jne 5f
-	4:
-		diem "can only check equality for numbers, booleans, strings, and null."
-	5:
-	.endif
 	mov %rbx, %rdi
 	mov %rax, %rbx
 	call kn_value_run
-	.ifndef KN_RECKLESS
-		mov %al, %dil
-		and $0b111, %dil
-		cmp $KN_TAG_AST, %dil
-		je 4f
-		cmp $KN_TAG_VARIABLE, %dil
-		jne 5f
-	4:
-		diem "can only check equality for numbers, booleans, strings, and null."
-	5:
-	.endif
+
+	# If they're identical, then they're equal.
+	cmp %rax, %rbx
+	je .kn_func_eql_identical
 
 	# ensure they are both strings.
 	mov $0b111, %cl
@@ -654,7 +636,7 @@ define_fn eql, 2, '?'
 	# now actually memcmp then
 	STRING_PTR %rax, %rsi
 	STRING_PTR %rbx, %rdi
-	# edx is already the length from when we checked lengths.
+	# rdx is already the length from when we checked lengths.
 	call _memcmp
 	test %eax, %eax
 	setz %cl
@@ -664,6 +646,7 @@ define_fn eql, 2, '?'
 	add $16, %rsp
 
 	# fallthrough
+
 .kn_func_eql_free_strings:
 	decl KN_STR_OFF_RC(%rbx)
 	jz 0f
@@ -693,37 +676,22 @@ define_fn eql, 2, '?'
 	mov %cl, %bl
 	mov %rax, %rdi
 	call kn_string_free
-	movzb %bl, %eax
-	shl $4, %al
+	mov %bl, %cl
+	jmp .kn_func_eql_done_strings
+
+.kn_func_eql_identical:
+	mov %rax, %rdi
+	call kn_value_free
+	mov %rbx, %rdi
+	call kn_value_free
+	mov $KN_TRUE, %eax
 	pop %rbx
 	ret
-
 .kn_func_eql_nonstring:
-	# We've already checked for ast/variables before (ie either crashed, or ignored because KN_RECKLESS),
-	# so we only gotta check for one of them being a string (so we can free it).
-	mov %al, %dil
-	and $0b111, %dil
-	cmp $KN_TAG_STRING, %dil
-	je 0f
-
-	mov %bl, %dil
-	and $0b111, %dil
-	cmp $KN_TAG_STRING, %dil
-	cmove %rbx, %rax
-	je 0f
-
-	# neither of them are strings, so just directly compare and return
-	cmp %rax, %rbx
-	sete %al
-	movzb %al, %eax
-	shl $4, %al
-	pop %rbx
-	ret
-0: # One of them is a string is a string, so they cant both be strings.
-	decl (-KN_TAG_STRING + KN_STR_OFF_RC)(%rax)
-	jnz 0f
-	call kn_string_free
-0:
+	mov %rax, %rdi
+	call kn_value_free
+	mov %rbx, %rdi
+	call kn_value_free
 	xor %eax, %eax
 	pop %rbx
 	ret
@@ -856,7 +824,7 @@ define_fn while, 2, 'W'
 	# optimize for the case where both the cond and body are while ASTs.
 	mov %bl, %ch
 	mov %r12b, %cl
-	and $0b0000011100000111, %cx # TODO: CLEAN ME UP
+	and $0b0000011100000111, %cx
 	cmp $(KN_TAG_AST << 8 | KN_TAG_AST), %cx
 	jne .kn_func_while_nonasts
 .kn_func_while_ast_top:
