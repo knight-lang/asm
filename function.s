@@ -20,13 +20,25 @@ kn_function_startup:
 	.byte \arity
 	.globl kn_func_\name
 	kn_func_\name:
+
+# 	push %rdi
+# 	lea definefn_name\@(%rip), %rdi
+# 	call _puts
+# 	pop %rdi
+# .pushsection .data, ""
+# definefn_name\@:
+# 	.asciz "\name"
+# .popsection
 .endm
 
 /* ARITY ZERO */
 
 define_fn prompt, 0, 'P'
 	sub $8, %rsp
-	diem "todo: function_prompt"
+	call prompt_for_a_line
+	or $KN_TAG_STRING, %al
+	add $8, %rsp
+	ret
 
 define_fn random, 0, 'R'
 	sub $8, %rsp
@@ -39,7 +51,26 @@ define_fn random, 0, 'R'
 
 define_fn eval, 1, 'E'
 	sub $8, %rsp
-	diem "todo: function_eval"
+	# convert the argument to a string
+	mov (%rdi), %rdi
+	call kn_value_to_string
+
+	# store the value so we can free it later, then run it.
+	mov %rax, (%rsp)
+	STRING_PTR %rax, %rdi
+	call kn_run
+
+	# only free if necessary
+	pop %rdi
+	decl (%rdi)
+	jz 0f
+	# dont gotta free, and we already popped, so we're good.
+	ret
+0:
+	push %rax
+	call kn_string_free
+	pop %rax
+	ret
 
 define_fn noop, 1, ':' # this is never actually parsed, but is used by `BLOCK`
 	mov (%rdi), %rdi
@@ -102,8 +133,24 @@ define_fn call, 1, 'C'
 	ret
 
 define_fn system, 1, '`'
-	sub $8, %rsp
-	diem "todo: function_system"
+	push %rbx
+	mov (%rdi), %rdi
+	call kn_value_to_string
+	mov %rax, %rbx
+	STRING_PTR %rax, %rdi
+	call shell_command
+	or $KN_TAG_STRING, %al
+	decl (%rbx)
+	jz 0f
+	pop %rbx
+	ret
+0:
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_string_free
+	mov %rbx, %rax
+	pop %rbx
+	ret
 
 define_fn quit, 1, 'Q'
 	sub $8, %rsp
@@ -127,7 +174,7 @@ define_fn length, 1, 'L'
 	push %rbx
 	mov (%rdi), %rdi
 	call kn_value_to_string
-	mov KN_STR_OFF_LEN(%rax), %ebx
+	STRING_LEN %rax, %ebx
 	decl KN_STR_OFF_RC(%rax)
 	jnz 0f
 	mov %rax, %rdi
@@ -175,8 +222,9 @@ define_fn output, 1, 'O'
 	ret
 .kn_output_no_slash:
 	# Ok, now we gotta print it without the trailing newline.
-	diem "todo: print without trailing newline. (%esi is length, %rdi is pointer)"
-	jmp .kn_output_free_string
+	# diem "todo: print without trailing newline. (%esi is length, %rdi is pointer)"
+	# jmp .kn_output_free_string
+	call _puts
 .kn_output_just_newline:
 	# we don't need to free the string, as the string is the empty string.
 	mov $'\n', %dil
@@ -199,7 +247,9 @@ define_fn dump, 1, 'D'
 	call kn_value_dump
 	mov $'\n', %dil
 	call _putchar
-	mov %rbx, %rax
+#	call _get_stdin
+#	mov %rax, %rdi
+#	call _fflush
 	pop %rbx
 	ret
 
@@ -232,15 +282,16 @@ define_fn add, 2, '+'
 
 	# (In the future, we could look up the hashed value.)
 	# Compute the new length and malloc it.
-	mov KN_STR_OFF_LEN(%rbx), %edi
-	add KN_STR_OFF_LEN(%rax), %edi
+	STRING_LEN %rbx, %edi
+	STRING_LEN %rax, %ecx
+	add %ecx, %edi
 	call kn_string_malloc
 	mov %rax, %r13
 
 	# Concat concat the first string.
 	STRING_PTR %rax, %rdi
 	STRING_PTR %rbx, %rsi
-	mov KN_STR_OFF_LEN(%rbx), %ebx # note it's not `+1`, so we omit railing newline
+	STRING_LEN %rbx, %ebx
 	mov %ebx, %edx
 	call _memcpy
 
@@ -248,7 +299,7 @@ define_fn add, 2, '+'
 	mov %rax, %rdi
 	add %rbx, %rdi
 	STRING_PTR %r12, %rsi
-	mov KN_STR_OFF_LEN(%r12), %edx
+	STRING_LEN %r12, %edx
 	inc %edx # +1 so we copy trailing `\0`
 	call _memcpy
 
@@ -785,6 +836,8 @@ define_fn while, 2, 'W'
 	mov (-KN_TAG_AST + KN_AST_OFF_FN)(%r12), %rax
 	lea (-KN_TAG_AST + KN_AST_OFF_ARGS)(%r12), %rdi
 	call *%rax
+	mov %rax, %rdi
+	call kn_value_free
 	jmp .kn_func_while_ast_top
 .kn_func_while_done:
 	pop %r13
@@ -817,8 +870,50 @@ define_fn while, 2, 'W'
 /* ARITY THREE */
 
 define_fn get, 3, 'G'
-	sub $8, %rsp
-	diem "todo: function_get"
+	push %rbx
+	push %r12
+	push %r13
+	mov (%rdi), %rbx
+	mov 8(%rdi), %r12
+	mov 16(%rdi), %r13
+
+	# convert all operands.
+	mov %rbx, %rdi
+	call kn_value_to_string
+	mov %rax, %rbx
+
+	mov %r12, %rdi
+	call kn_value_to_number
+	mov %rax, %r12
+
+	mov %r13, %rdi
+	call kn_value_to_number
+	mov %rax, %r13
+
+	# perform the offset and create a new string
+	STRING_PTR %rbx, %rdi
+	add %r12, %rdi
+	mov %r13, %rsi
+	call kn_string_new_borrowed
+	or $KN_TAG_STRING, %al
+
+	# decrement the old string refcount
+	decl KN_STR_OFF_RC(%rbx)
+	jz 0f
+	pop %r13
+	pop %r12
+	pop %rbx
+	ret
+0:
+	# free the original string
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_string_free
+	mov %rbx, %rax
+	pop %r13
+	pop %r12
+	pop %rbx
+	ret
 
 define_fn if, 3, 'I'
 	push %rdi
@@ -833,5 +928,90 @@ define_fn if, 3, 'I'
 /* ARITY FOUR */
 
 define_fn set, 4, 'S'
-	sub $8, %rsp
-	diem "todo: function_set"
+	push %rbx
+	mov (%rdi), %rdi
+	call kn_value_to_string
+	mov %rax, %rbx
+
+# TODO: actually perform `set`
+	STRING_PTR %rax, %rdi
+	inc %rdi
+
+	STRING_LEN %rax, %esi
+	dec %rsi
+	call kn_string_new_borrowed
+	or $KN_TAG_STRING, %al
+
+	# decrement the old string refcount
+	decl KN_STR_OFF_RC(%rbx)
+	jz 0f
+	pop %rbx
+	ret
+0:
+	# free the original string
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_string_free
+	mov %rbx, %rax
+	pop %rbx
+	ret
+
+
+/*
+	push %rbx
+	push %r12
+	push %r13
+	push %r14
+	push %r15
+	mov (%rdi), %rbx
+	mov 8(%rdi), %r12
+	mov 16(%rdi), %r13
+	mov 24(%rdi), %r14
+
+	# convert all operands.
+	mov %rbx, %rdi
+	call kn_value_to_string
+	mov %rax, %rbx
+
+	mov %r12, %rdi
+	call kn_value_to_number
+	mov %rax, %r12
+
+	mov %r13, %rdi
+	call kn_value_to_number
+	mov %rax, %r13
+
+	mov %r13, %rdi
+	call kn_value_to_string
+	mov %rax, %r14
+
+	# TODO: DO something other than just reading the first index.
+	STRING_PTR %rbx, %rdi
+	inc %rdi
+
+	STRING_LEN %rbx, %esi
+	dec %rsi
+	call kn_string_new_borrowed
+	or $KN_TAG_STRING, %al
+
+	# decrement the old string refcount
+	decl KN_STR_OFF_RC(%rbx)
+	jz 0f
+	pop %r15
+	pop %r14
+	pop %r13
+	pop %r12
+	pop %rbx
+	ret
+0:
+	# free the original string
+	mov %rbx, %rdi
+	mov %rax, %rbx
+	call kn_string_free
+	mov %rbx, %rax
+	pop %r15
+	pop %r14
+	pop %r13
+	pop %r12
+	pop %rbx
+	ret*/

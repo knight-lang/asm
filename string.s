@@ -7,7 +7,8 @@
 kn_string_malloc:
 	push %rdi
 	inc %rdi
-	call xmalloc
+	mov $1, %esi
+	call _calloc
 	mov %rax, %rdi
 	pop %rsi
 	# fallthrough
@@ -15,8 +16,11 @@ kn_string_malloc:
 .globl kn_string_new_owned
 kn_string_new_owned:
 	sub $8, %rsp
+	test %rsi, %rsi
+	jz 0f
 	push %rbx
 	push %r12
+
 
 	mov %rdi, %rbx
 	mov %rsi, %r12
@@ -30,6 +34,11 @@ kn_string_new_owned:
 	pop %r12
 	pop %rbx
 	add $8, %rsp
+	ret
+0:
+	call _free
+	add $8, %rsp
+	lea kn_string_empty(%rip), %rax
 	ret
 
 .globl kn_string_new_borrowed
@@ -46,6 +55,7 @@ kn_string_new_borrowed:
 
 .globl kn_string_free
 kn_string_free:
+	#ret // todo
 	push %rbx
 	mov %rdi, %rbx
 
@@ -61,3 +71,14 @@ kn_string_free:
 	mov %rbx, %rdi
 	pop %rbx
 	jmp _free
+
+.data
+kn_string_repr_empty:
+	.asciz ""
+
+.align 16
+.globl kn_string_empty
+kn_string_empty:
+	.long -2147483648
+	.long 0
+	.quad kn_string_repr_empty

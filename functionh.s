@@ -1,7 +1,8 @@
 .macro KN_FN_ARITY src:req dst=_none
-	.ifc dst, _none
-		movzb -1(\src), \src
-	.else
-		movzb -1(\src), \dst
+	.ifc \dst, _none
+		KN_FN_ARITY \src, \src
+		.exitm
 	.endif
+
+	movzb -1(\src), \dst
 .endm

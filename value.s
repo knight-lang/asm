@@ -14,10 +14,10 @@
 
 .macro assert_is_one_of reg:req, rest:vararg
 	.ifndef NDEBUG
-		_assert_one_of assert_kind_one_of_end_\@, \reg, \rest
+		_assert_one_of .Lassert_kind_one_of_end_\@, \reg, \rest
 		diem "oops: \reg is not one of: \rest"
 	.endif
-assert_kind_one_of_end_\@:
+.Lassert_kind_one_of_end_\@:
 .endm
 
 // # #include "env.h"    /* kn_variable, kn_variable_run */
@@ -211,6 +211,7 @@ assert_kind_one_of_end_\@:
 // # 
 
 kn_value_to_number_run_var:
+
 	run_var %rdi
 
 	# fallthrough
@@ -262,6 +263,7 @@ kn_value_to_number:
 	ret
 
 kn_value_to_string_run_var:
+
 	run_var %rdi
 	# fallthrough
 .globl kn_value_to_string
@@ -321,21 +323,14 @@ kn_value_to_string:
 	assert_is_one_of %cl, KN_TAG_NUMBER
 	sar $3, %rdi
 	push %rbx
-	mov %rdi, %rbx
-	# TODO optimize this more
-	mov $22, %rdi
-	call xmalloc
-	mov %rbx, %rdx
-	mov %rax, %rdi
+	call number_to_string
 	mov %rax, %rbx
-	lea kn_value_string_sprintf(%rip), %rsi
-	call _sprintf
-	mov %rbx, %rdi
+	mov %rax, %rdi
 	call _strlen
-	mov %rax, %rsi
 	mov %rbx, %rdi
+	mov %rax, %rsi
 	pop %rbx
-	jmp kn_string_new_owned
+	jmp kn_string_new_borrowed
 
 .pushsection .data, ""
 kn_value_string_sprintf:        .asciz "%lld"
@@ -379,7 +374,7 @@ kn_value_to_boolean:
 	cmp $KN_NULL, %rdi
 	ja 0f
 	assert_is_one_of %dil, KN_NULL, KN_FALSE, KN_TAG_NUMBER
-	ret
+	ret # eax is already xor'd
 0:
 	# Next to see if it's an Ast. If it is, then run it, then convert it.
 	test $KN_TAG_AST, %dil
@@ -422,6 +417,7 @@ kn_value_to_boolean:
 
 	# It's a variable! run it and call the function again.
 	push %rbx
+	
 	run_var %rdi
 	mov %rdi, %rbx
 	call kn_value_to_boolean
@@ -438,123 +434,6 @@ kn_value_to_boolean:
 	cmpb $0, (%rdi)
 	setne %al
 	ret
-
-// # kn_boolean kn_value_to_boolean(kn_value value) {
-// # 	assert(value != KN_UNDEFINED);
-// # 
-// # 	switch (KN_TAG(value)) {
-// # 	case KN_TAG_CONSTANT:
-// # 		return value == KN_TRUE;
-// # 
-// # 	case KN_TAG_NUMBER:
-// # 		return value != KN_TAG_NUMBER;
-// # 
-// # 	case KN_TAG_STRING:
-// # 		return kn_string_length(kn_value_as_string(value)) != 0;
-// # 
-// # #ifdef KN_CUSTOM
-// # 	case KN_TAG_CUSTOM: {
-// # 		struct kn_custom *custom = kn_value_as_custom(value);
-// # 
-// # 		#if (custom->vtable->to_boolean != NULL)
-// # 			return custom->vtable->to_boolean(custom->data);
-// # 		// otherwise, fallthrough
-// # 	}
-// # #endif /* KN_CUSTOM */
-// # 
-// # 	case KN_TAG_AST:
-// # 	case KN_TAG_VARIABLE: {
-// # 		// simply execute the value and call this function again.
-// # 		kn_value ran = kn_value_run(value);
-// # 		kn_boolean ret = kn_value_to_boolean(ran);
-// # 		kn_value_free(ran);
-// # 
-// # 		return ret;
-// # 	}
-// # 
-// # 	default:
-// # 		KN_UNREACHABLE();
-// # 	}
-// # }
-// # 
-// # static struct kn_string *number_to_string(kn_number num) {
-// # 	// note that `22` is the length of `-UINT64_MIN`, which is 21 characters
-// # 	// long + the trailing `\0`.
-// # 	static char buf[22];
-// # 	static struct kn_string number_string = { .flags = KN_STRING_FL_STATIC };
-// # 
-// # 	// should have been checked earlier.
-// # 	assert(num != 0 && num != 1);
-// # 
-// # 	// initialize ptr to the end of the buffer minus one, as the last is
-// # 	// the nul terminator.
-// # 	char *ptr = &buf[sizeof(buf) - 1];
-// # 	bool is_neg = num < 0;
-// # 
-// # 	#if (is_neg)
-// # 		num *= -1;
-// # 
-// # 	do {
-// # 		*--ptr = '0' + (num % 10);
-// # 	} while (num /= 10);
-// # 
-// # 	#if (is_neg)
-// # 		*--ptr = '-';
-// # 
-// # 	number_string.alloc.str = ptr;
-// # 	number_string.alloc.length = &buf[sizeof(buf) - 1] - ptr;
-// # 
-// # 	return &number_string;
-// # }
-// # 
-// # struct kn_string *kn_value_to_string(kn_value value) {
-// # 	// static, embedded strings so we don't have to allocate for known strings.
-// # 	static struct kn_string builtin_strings[KN_TRUE + 1] = {
-// # 		[KN_FALSE] = KN_STRING_NEW_EMBED("false"),
-// # 		[KN_TAG_NUMBER] = KN_STRING_NEW_EMBED("0"),
-// # 		[KN_NULL] = KN_STRING_NEW_EMBED("null"),
-// # 		[KN_TRUE] = KN_STRING_NEW_EMBED("true"),
-// # 		[(((uint64_t) 1) << KN_SHIFT) | KN_TAG_NUMBER] = KN_STRING_NEW_EMBED("1"),
-// # 	};
-// # 
-// # 	assert(value != KN_UNDEFINED);
-// # 
-// # 	#if (KN_UNLIKELY(value <= KN_TRUE))
-// # 		return &builtin_strings[value];
-// # 
-// # 	switch (KN_EXPECT(KN_TAG(value), KN_TAG_STRING)) {
-// # 	case KN_TAG_NUMBER:
-// # 		return number_to_string(kn_value_as_number(value));
-// # 
-// # 	case KN_TAG_STRING:
-// # 		return kn_string_clone(kn_value_as_string(value));
-// # 
-// # #ifdef KN_CUSTOM
-// # 	case KN_TAG_CUSTOM: {
-// # 		struct kn_custom *custom = kn_value_as_custom(value);
-// # 
-// # 		#if (custom->vtable->to_string != NULL)
-// # 			return custom->vtable->to_string(custom->data);
-// # 		// otherwise, fallthrough
-// # 	}
-// # #endif /* KN_CUSTOM */
-// # 
-// # 	case KN_TAG_AST:
-// # 	case KN_TAG_VARIABLE: {
-// # 		// simply execute the value and call this function again.
-// # 		kn_value ran = kn_value_run(value);
-// # 		struct kn_string *ret = kn_value_to_string(ran);
-// # 		kn_value_free(ran);
-// # 
-// # 		return ret;
-// # 	}
-// # 
-// # 	case KN_TAG_CONSTANT:
-// # 	default:
-// # 		KN_UNREACHABLE();
-// # 	}
-// # }
-// # 
 
 # This is such a hack, and is just here for shiggles
 .globl kn_value_dump
@@ -694,6 +573,7 @@ kn_value_run:
 	and $0b111, %cl
 	cmp $KN_TAG_VARIABLE, %cl
 	jne 0f
+	
 	run_var %rdi, %rax
 	ret
 0:

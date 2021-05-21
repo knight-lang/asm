@@ -18,9 +18,9 @@ kn_ast_alloc:
 	push %rbx
 	mov %rdi, %rbx
 
-	KN_FN_ARITY %rdi, %rax
-	imul $KN_VALUE_SIZE, %rax # this and the folowing one can probably be reduced to a single lea
-	add $16, %rax # 4 for refcount, 4 for padding, 8 for size of a function pointer
+	KN_FN_ARITY %rdi
+	imul $KN_VALUE_SIZE, %rdi # this and the folowing one can probably be reduced to a single lea
+	add $16, %rdi # 4 for refcount, 4 for padding, 8 for size of a function pointer
 
 	call xmalloc
 
@@ -32,5 +32,5 @@ kn_ast_alloc:
 
 .globl kn_ast_free
 kn_ast_free:
-	// todo free asts
+	# todo free asts
 	ret

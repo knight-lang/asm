@@ -1,6 +1,3 @@
-.equ KN_RECKLESS, 1
-.equ NDEBUG, 1
-
 # The ordering is chosen very carefully:
 # - is the tag is <= 2, we don't need to free it
 # - if the tag is <= 1, we can return it when running it.
@@ -71,7 +68,7 @@
 	\func *\scratch
 .endm
 
-.macro run_var var:req, dst=_none
+.macro run_var var:req, dst=_none, scratch=%r8
 	.ifc \dst, _none
 		run_var \var, \var
 		.exitm
@@ -85,5 +82,15 @@
 		diem "undefined variable accessed"
 	run_var_check_result_\@:
 	.endif
+
+	mov \dst, \scratch
+	and $0b111, \scratch
+	cmp $3, \scratch
+	jb .run_var_no_incr_\@
+	mov \dst ,\scratch
+	and $~0b111, \scratch
+	incl (\scratch)
+.run_var_no_incr_\@:
+
 .endm
 

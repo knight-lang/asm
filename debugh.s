@@ -1,5 +1,5 @@
-.equ KN_RECKLESS, 1
-.equ NDEBUG, 1
+# .equ KN_RECKLESS, 1
+# .equ NDEBUG, 1
 
 .macro diem msg:req
 	test $8, %rax

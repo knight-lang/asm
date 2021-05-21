@@ -45,8 +45,7 @@ parse_commandline_args:
 	cmp $0x00662d, %eax
 	jne usage
 	mov 16(%rsi), %rdi
-	# call read_file
-	call die
+	jmp read_file
 
 usage:
 	sub $8, %rsp
