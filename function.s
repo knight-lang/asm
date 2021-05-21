@@ -822,11 +822,12 @@ define_fn while, 2, 'W'
 	mov 8(%rdi), %r12
 
 	# optimize for the case where both the cond and body are while ASTs.
-	mov %bl, %ch
-	mov %r12b, %cl
-	and $0b0000011100000111, %cx
-	cmp $(KN_TAG_AST << 8 | KN_TAG_AST), %cx
+	mov $0b111, %cl
+	and %al, %cl
+	and %bl, %cl
+	cmp $KN_TAG_AST, %cl
 	jne .kn_func_while_nonasts
+
 .kn_func_while_ast_top:
 	mov (-KN_TAG_AST + KN_AST_OFF_FN)(%rbx), %rax
 	lea (-KN_TAG_AST + KN_AST_OFF_ARGS)(%rbx), %rdi
