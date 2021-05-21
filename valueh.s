@@ -3,7 +3,8 @@
 # - if the tag is <= 1, we can return it when running it.
 # - if the tag has `0b100` set, we can know the tag is unique.
 # - if the tag has `0b010` set, and the value's not a variable, it's a string.
-.equ KN_TAG_CONSTANT,  0b000 # NUMBER OR CONSTANT.
+# - anding two tags together is only equal to an ast or string if both args are asts or strings
+.equ KN_TAG_CONSTANT,  0b000
 .equ KN_TAG_NUMBER,    0b001
 .equ KN_TAG_VARIABLE,  0b010
 .equ KN_TAG_STRING,    0b011

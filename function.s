@@ -21,14 +21,14 @@ kn_function_startup:
 	.globl kn_func_\name
 	kn_func_\name:
 
-# 	push %rdi
-# 	lea definefn_name\@(%rip), %rdi
-# 	call _puts
-# 	pop %rdi
-# .pushsection .data, ""
-# definefn_name\@:
-# 	.asciz "\name"
-# .popsection
+#	push %rdi
+#	lea definefn_name\@(%rip), %rdi
+#	call _puts
+#	pop %rdi
+#.pushsection .data, ""
+#definefn_name\@:
+#	.asciz "\name"
+#.popsection
 .endm
 
 /* ARITY ZERO */
@@ -239,18 +239,15 @@ define_fn output, 1, 'O'
 
 
 define_fn dump, 1, 'D'
-	push %rbx
+	sub $8, %rsp
 	mov (%rdi), %rdi
 	call kn_value_run
+	mov %rax, (%rsp)
 	mov %rax, %rdi
-	mov %rax, %rbx
 	call kn_value_dump
-	mov $'\n', %dil
+	mov $'\n', %edi
 	call _putchar
-#	call _get_stdin
-#	mov %rax, %rdi
-#	call _fflush
-	pop %rbx
+	pop %rax
 	ret
 
 /* ARITY TWO */
@@ -432,7 +429,6 @@ define_fn lth, 2, '<'
 	jne .kn_func_lth_not_string
 	and $~0b111, %al # delete string tag if it is.
 
-
 	# it is, convert the rhs to a string
 	mov %rbx, %rdi
 	mov %rax, %rbx
@@ -442,14 +438,14 @@ define_fn lth, 2, '<'
 	# now compare them
 	STRING_PTR %rbx, %rdi
 	STRING_PTR %rax, %rsi
-	call _strcmp # always returns a value in -128..127
+	call _strcmp
 
 	# free lhs and store old result
 	decl KN_STR_OFF_RC(%rbx)
 	jz 0f
 	decl KN_STR_OFF_RC(%r12)
 	jz 1f
-	mov %rax, %rbx
+	movsx %eax, %rbx
 
 .kn_func_lth_done:
 	xor %eax, %eax
@@ -463,7 +459,7 @@ define_fn lth, 2, '<'
 0:
 	# gotta free lhs, and possibly rhs. also gotta save %rax for later.
 	mov %rbx, %rdi
-	mov %rax, %rbx
+	movsx %eax, %rbx
 	call kn_string_free
 	# do we have to free the rhs?
 	decl KN_STR_OFF_RC(%r12)
@@ -472,7 +468,7 @@ define_fn lth, 2, '<'
 	mov %rbx, %rax # just so the next line is a noop
 1:
 	# gotta free rhs and save %rax for later. lhs has already been dealt with.
-	mov %rax, %rbx # store the previous value
+	movsx %eax, %rbx # store the previous value
 	mov %r12, %rdi
 	call kn_string_free
 	jmp .kn_func_lth_done
@@ -524,7 +520,6 @@ define_fn gth, 2, '>'
 	jne .kn_func_gth_not_string
 	and $~0b111, %al # delete string tag if it is.
 
-
 	# it is, convert the rhs to a string
 	mov %rbx, %rdi
 	mov %rax, %rbx
@@ -534,14 +529,14 @@ define_fn gth, 2, '>'
 	# now compare them
 	STRING_PTR %rbx, %rdi
 	STRING_PTR %rax, %rsi
-	call _strcmp # always returns a value in -128..127
+	call _strcmp
 
 	# free lhs and store old result
 	decl KN_STR_OFF_RC(%rbx)
 	jz 0f
 	decl KN_STR_OFF_RC(%r12)
 	jz 1f
-	mov %rax, %rbx
+	movsx %eax, %rbx
 
 .kn_func_gth_done:
 	xor %eax, %eax
@@ -555,7 +550,7 @@ define_fn gth, 2, '>'
 0:
 	# gotta free lhs, and possibly rhs. also gotta save %rax for later.
 	mov %rbx, %rdi
-	mov %rax, %rbx
+	movsx %eax, %rbx
 	call kn_string_free
 	# do we have to free the rhs?
 	decl KN_STR_OFF_RC(%r12)
@@ -564,7 +559,7 @@ define_fn gth, 2, '>'
 	mov %rbx, %rax # just so the next line is a noop
 1:
 	# gotta free rhs and save %al for later. lhs has already been dealt with.
-	mov %rax, %rbx # store the previous value
+	movsx %eax, %rbx # store the previous value
 	mov %r12, %rdi
 	call kn_string_free
 	jmp .kn_func_gth_done
@@ -608,20 +603,38 @@ define_fn eql, 2, '?'
 	# Run LHS then RHS.
 	mov (%rdi), %rdi
 	call kn_value_run
+	.ifndef KN_RECKLESS
+		mov %al, %dil
+		and $0b111, %dil
+		cmp $KN_TAG_AST, %dil
+		je 4f
+		cmp $KN_TAG_VARIABLE, %dil
+		jne 5f
+	4:
+		diem "can only check equality for numbers, booleans, strings, and null."
+	5:
+	.endif
 	mov %rbx, %rdi
 	mov %rax, %rbx
 	call kn_value_run
-
-	# If they're identical, then they're equal.
-	cmp %rax, %rbx
-	je .kn_func_eql_identical
+	.ifndef KN_RECKLESS
+		mov %al, %dil
+		and $0b111, %dil
+		cmp $KN_TAG_AST, %dil
+		je 4f
+		cmp $KN_TAG_VARIABLE, %dil
+		jne 5f
+	4:
+		diem "can only check equality for numbers, booleans, strings, and null."
+	5:
+	.endif
 
 	# ensure they are both strings.
-	mov %al, %cl
-	mov %bl, %ch
-	and $0b0000011100000111, %cx
-	cmp $(KN_TAG_STRING << 8 | KN_TAG_STRING), %cx
-	jne .kn_func_eql_nonstring # if theyre not strings, then they cant be equal.
+	mov $0b111, %cl
+	and %al, %cl
+	and %bl, %cl
+	cmp $KN_TAG_STRING, %cl
+	jne .kn_func_eql_nonstring
 
 	# now we know they're both strings, we compare them.
 	and $~0b111, %al
@@ -641,7 +654,7 @@ define_fn eql, 2, '?'
 	# now actually memcmp then
 	STRING_PTR %rax, %rsi
 	STRING_PTR %rbx, %rdi
-	# rdx is already the length from when we checked lengths.
+	# edx is already the length from when we checked lengths.
 	call _memcmp
 	test %eax, %eax
 	setz %cl
@@ -651,7 +664,6 @@ define_fn eql, 2, '?'
 	add $16, %rsp
 
 	# fallthrough
-
 .kn_func_eql_free_strings:
 	decl KN_STR_OFF_RC(%rbx)
 	jz 0f
@@ -681,22 +693,37 @@ define_fn eql, 2, '?'
 	mov %cl, %bl
 	mov %rax, %rdi
 	call kn_string_free
-	mov %bl, %cl
-	jmp .kn_func_eql_done_strings
-
-.kn_func_eql_identical:
-	mov %rax, %rdi
-	call kn_value_free
-	mov %rbx, %rdi
-	call kn_value_free
-	mov $KN_TRUE, %eax
+	movzb %bl, %eax
+	shl $4, %al
 	pop %rbx
 	ret
+
 .kn_func_eql_nonstring:
-	mov %rax, %rdi
-	call kn_value_free
-	mov %rbx, %rdi
-	call kn_value_free
+	# We've already checked for ast/variables before (ie either crashed, or ignored because KN_RECKLESS),
+	# so we only gotta check for one of them being a string (so we can free it).
+	mov %al, %dil
+	and $0b111, %dil
+	cmp $KN_TAG_STRING, %dil
+	je 0f
+
+	mov %bl, %dil
+	and $0b111, %dil
+	cmp $KN_TAG_STRING, %dil
+	cmove %rbx, %rax
+	je 0f
+
+	# neither of them are strings, so just directly compare and return
+	cmp %rax, %rbx
+	sete %al
+	movzb %al, %eax
+	shl $4, %al
+	pop %rbx
+	ret
+0: # One of them is a string is a string, so they cant both be strings.
+	decl (-KN_TAG_STRING + KN_STR_OFF_RC)(%rax)
+	jnz 0f
+	call kn_string_free
+0:
 	xor %eax, %eax
 	pop %rbx
 	ret
@@ -775,9 +802,16 @@ define_fn or, 2, '|'
 define_fn then, 2, ';'
 	push 8(%rdi)
 	mov (%rdi), %rdi
-	call kn_value_run
+	# The only value kind that makes sense to run on the LHS is an AST. Running undefined
+	# variables is UB, and all other types are idempotent.
+	test $KN_TAG_AST, %rdi
+	jz 0f
+	mov (-KN_TAG_AST + KN_AST_OFF_FN)(%rdi), %rax
+	lea (-KN_TAG_AST + KN_AST_OFF_ARGS)(%rdi), %rdi
+	call *%rax
 	mov %rax, %rdi
 	call kn_value_free
+0:
 	pop %rdi
 	jmp kn_value_run
 
@@ -792,23 +826,24 @@ define_fn assign, 2, '='
 	.endif
 
 	# Store the variable
-	push (%rdi)
+	push %rbx
+	mov (%rdi), %rbx
 
 	# Execute the rhs
 	mov 8(%rdi), %rdi
 	call kn_value_run
 
 	# Store the new result, preserving the old one so we can free it.
-	mov (%rsp), %rcx
-	mov (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rcx), %rdi
-	mov %rax, (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rcx)
-	mov %rax, (%rsp)
+	mov (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rbx), %rdi
+	mov %rax, (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rbx)
+	mov %rax, %rbx
 
 	# Free the old result
 	call kn_value_free
 
 	# Clone the new result
-	pop %rdi
+	mov %rbx, %rdi
+	pop %rbx
 	jmp kn_value_clone
 
 define_fn while, 2, 'W'
@@ -821,7 +856,7 @@ define_fn while, 2, 'W'
 	# optimize for the case where both the cond and body are while ASTs.
 	mov %bl, %ch
 	mov %r12b, %cl
-	and $0b0000011100000111, %cx
+	and $0b0000011100000111, %cx # TODO: CLEAN ME UP
 	cmp $(KN_TAG_AST << 8 | KN_TAG_AST), %cx
 	jne .kn_func_while_nonasts
 .kn_func_while_ast_top:
@@ -869,7 +904,7 @@ define_fn while, 2, 'W'
 
 /* ARITY THREE */
 
-define_fn get, 3, 'G'
+define_fn get, 3, 'G' # 1761478
 	push %rbx
 	push %r12
 	push %r13

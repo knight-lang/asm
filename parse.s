@@ -80,6 +80,7 @@ identifier:
 	mov stream_reg, %rsi
 	sub %rdi, %rsi
 	dec %rsi
+	unadvance
 	call kn_env_fetch
 # convert it to a string
 	jmp done_parsing

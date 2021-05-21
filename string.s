@@ -52,10 +52,8 @@ kn_string_new_borrowed:
 	pop %rbx
 	jmp kn_string_new_owned
 
-
 .globl kn_string_free
 kn_string_free:
-	#ret // todo
 	push %rbx
 	mov %rdi, %rbx
 
