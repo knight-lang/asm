@@ -811,8 +811,9 @@ define_fn or, 2, '|'
 define_fn then, 2, ';'
 	push 8(%rdi)
 	mov (%rdi), %rdi
+
 	# The only value kind that makes sense to run on the LHS is an AST. Running undefined
-	# variables is UB, and all other types are idempotent.
+	# variables is UB, and all other types are idempotent. So just ignore other types.
 	test $KN_TAG_AST, %rdi
 	jz 0f
 	mov (-KN_TAG_AST + KN_AST_OFF_FN)(%rdi), %rax
@@ -822,7 +823,29 @@ define_fn then, 2, ';'
 	call kn_value_free
 0:
 	pop %rdi
-	jmp kn_value_run
+	# It's likely to have an AST on the RHS of an AST, second only by a variable.
+	test $KN_TAG_AST, %dil
+	jz 0f
+	mov (-KN_TAG_AST + KN_AST_OFF_FN)(%rdi), %rax
+	lea (-KN_TAG_AST + KN_AST_OFF_ARGS)(%rdi), %rdi
+	jmp *%rax
+0:
+	# Check to see if it's a variable.
+	mov %dil, %cl
+	and $0b111, %cl
+	cmp $KN_TAG_VARIABLE, %cl
+	jne 0f
+	and $~0b111, %dil
+	run_var %rdi, %rax
+	ret
+0:
+	# If it's not a string, just return the literal value.
+	mov %rdi, %rax
+	cmp $KN_TAG_STRING, %cl
+	jne 0f
+	incl (-KN_TAG_STRING + KN_STR_OFF_RC)(%rdi) # ok it's a string, increment the refcount.
+0:
+	ret
 
 define_fn assign, 2, '='
 	.ifndef KN_RECKLESS
