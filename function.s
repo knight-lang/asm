@@ -160,15 +160,56 @@ define_fn quit, 1, 'Q'
 	call _exit
 
 define_fn not, 1, '!'
-	# load the value to convert
 	mov (%rdi), %rdi
+	# it's unlikely to try to invert anything other than an AST, as that's just a constant operation.
+	test $KN_TAG_AST, %dil
+	jz .kn_func_not_nonast
+	mov (-KN_TAG_AST + KN_AST_OFF_FN)(%rdi), %rax
+	lea (-KN_TAG_AST + KN_AST_OFF_ARGS)(%rdi), %rdi
 	sub $8, %rsp
-	call kn_value_to_boolean
+	call *%rax
 	add $8, %rsp
-	# bit twiddle the return value.
-	xor $1, %al
+	# todo: assert that it must be idempotent
+	mov %rax, %rdi
+.kn_func_not_nonidempotent:
+	xor %eax, %eax
+	# If it's a falsey literal/constant, then return true.
+	cmp $KN_NULL, %rdi
+	ja 0f
+	mov $KN_TRUE, %al
+	ret
+0:
+	# If it's a nonstring, then it becomes falsey
+	mov %dil, %cl
+	and $0b111, %cl
+	cmp $KN_TAG_STRING, %cl
+	je 0f
+	ret
+0:	
+	and $~0b111, %dil
+	STRING_LEN %rdi, %edi
+	test %edi, %edi # only nonempty strings are true.
+	setz %al
 	shl $4, %al
 	ret
+.kn_func_not_nonast:
+	mov %dil, %cl
+	and $0b111, %cl
+	cmp $KN_TAG_VARIABLE, %cl
+	jne .kn_func_not_nonidempotent
+	and $~0b111, %dil
+	run_var %rdi
+	jmp .kn_func_not_nonidempotent
+
+#	# load the value to convert
+#	mov (%rdi), %rdi
+#	sub $8, %rsp
+#	call kn_value_to_boolean
+#	add $8, %rsp
+#	# bit twiddle the return value.
+#	xor $1, %al
+#	shl $4, %al
+#	ret
 
 define_fn length, 1, 'L'
 	push %rbx
@@ -822,10 +863,16 @@ define_fn while, 2, 'W'
 	mov 8(%rdi), %r12
 
 	# optimize for the case where both the cond and body are while ASTs.
-	mov $0b111, %cl
-	and %al, %cl
-	and %bl, %cl
-	cmp $KN_TAG_AST, %cl
+	# mov $0b111, %cl
+	# and %bl, %cl
+	# and %r12b, %cl
+	# cmp $KN_TAG_AST, %cl
+	# call ddebug
+	mov %bl, %ch
+	mov %r12b, %cl
+	and $0b0000011100000111, %cx
+	cmp $(KN_TAG_AST << 8 | KN_TAG_AST), %cx
+
 	jne .kn_func_while_nonasts
 
 .kn_func_while_ast_top:
@@ -836,6 +883,7 @@ define_fn while, 2, 'W'
 	jz .kn_func_while_done
 	cmp $KN_TRUE, %eax
 	jne .kn_func_while_ast_check_cond
+
 .kn_func_while_ast_body:
 	mov (-KN_TAG_AST + KN_AST_OFF_FN)(%r12), %rax
 	lea (-KN_TAG_AST + KN_AST_OFF_ARGS)(%r12), %rdi
@@ -843,6 +891,7 @@ define_fn while, 2, 'W'
 	mov %rax, %rdi
 	call kn_value_free
 	jmp .kn_func_while_ast_top
+
 .kn_func_while_done:
 	pop %r13
 	pop %r12
