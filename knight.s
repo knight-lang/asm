@@ -6,6 +6,7 @@
 kn_startup:
 	sub $8, %rsp
 	call kn_function_startup
+	call kn_ast_startup
 	add $8, %rsp
 	jmp kn_env_startup
 

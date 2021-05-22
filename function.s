@@ -273,11 +273,6 @@ define_fn output, 1, 'O'
 	pop %rbx
 	mov $KN_NULL, %eax
 	ret
-/*
-     size_t
-     fwrite(const void *restrict ptr, size_t size, size_t nitems, FILE *restrict stream);
-*/
-
 
 define_fn dump, 1, 'D'
 	sub $8, %rsp
@@ -782,11 +777,11 @@ define_fn or, 2, '|'
 	test %rax, %rax
 	jz kn_value_run
 	cmp $KN_TRUE, %rax
-	jnz .kn_func_or_non_boolean
+	jnz 0f
 	ret
 
 # We're dealing with a non-boolean for the first value, so we have a bit more to do, eg freeing it.
-.kn_func_or_non_boolean:
+0:
 	push %rdi
 	push %rax
 	sub $8, %rsp
@@ -886,16 +881,10 @@ define_fn while, 2, 'W'
 	mov 8(%rdi), %r12
 
 	# optimize for the case where both the cond and body are while ASTs.
-	# mov $0b111, %cl
-	# and %bl, %cl
-	# and %r12b, %cl
-	# cmp $KN_TAG_AST, %cl
-	# call ddebug
-	mov %bl, %ch
-	mov %r12b, %cl
-	and $0b0000011100000111, %cx
-	cmp $(KN_TAG_AST << 8 | KN_TAG_AST), %cx
-
+	mov $0b111, %cl
+	and %bl, %cl
+	and %r12b, %cl
+	cmp $KN_TAG_AST, %cl
 	jne .kn_func_while_nonasts
 
 .kn_func_while_ast_top:

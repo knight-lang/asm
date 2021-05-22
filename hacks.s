@@ -126,6 +126,61 @@ prompt_for_a_line:
         popq    %r14
         retq
 
+.globl hash_it
+hash_it:
+# shamelessly copied from clang
+        movq    %rdx, %rax
+        testq   %rsi, %rsi
+        je      .hashit_LBB0_8
+        movabsq $6616326155283851669, %r9       # imm = 0x5BD1E9955BD1E995
+        leaq    -1(%rsi), %r8
+        movq    %rsi, %r10
+        andq    $3, %r10
+        je      .hashit_LBB0_5
+        xorl    %edx, %edx
+.hashit_LBB0_3:
+        movsbq  (%rdi,%rdx), %rcx
+        xorq    %rax, %rcx
+        imulq   %r9, %rcx
+        movq    %rcx, %rax
+        shrq    $47, %rax
+        xorq    %rcx, %rax
+        addq    $1, %rdx
+        cmpq    %rdx, %r10
+        jne     .hashit_LBB0_3
+        subq    %rdx, %rsi
+        addq    %rdx, %rdi
+.hashit_LBB0_5:
+        cmpq    $3, %r8
+        jb      .hashit_LBB0_8
+        xorl    %r8d, %r8d
+.hashit_LBB0_7:
+        movsbq  (%rdi,%r8), %rcx
+        xorq    %rax, %rcx
+        imulq   %r9, %rcx
+        movsbq  1(%rdi,%r8), %rax
+        xorq    %rcx, %rax
+        shrq    $47, %rcx
+        xorq    %rcx, %rax
+        imulq   %r9, %rax
+        movsbq  2(%rdi,%r8), %rcx
+        xorq    %rax, %rcx
+        shrq    $47, %rax
+        xorq    %rax, %rcx
+        imulq   %r9, %rcx
+        movsbq  3(%rdi,%r8), %rdx
+        xorq    %rcx, %rdx
+        shrq    $47, %rcx
+        xorq    %rcx, %rdx
+        imulq   %r9, %rdx
+        movq    %rdx, %rax
+        shrq    $47, %rax
+        xorq    %rdx, %rax
+        addq    $4, %r8
+        cmpq    %r8, %rsi
+        jne     .hashit_LBB0_7
+.hashit_LBB0_8:
+        retq
 
 .globl shell_command
 shell_command:
@@ -224,6 +279,7 @@ run:
 .bss
 number_to_string_buf:
         .zero 22
+
 
 
 
