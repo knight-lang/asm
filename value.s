@@ -314,7 +314,7 @@ kn_value_to_string:
 	cmp $0b10001, %rax
 	ja .kn_value_to_string_number
 	movzb %al, %eax
-	imul $KN_STR_SIZE, %rax
+	imul $KN_STR_SIZE, %rax # `mul` without imul?
 	lea kn_value_string_reprs(%rip), %rdi
 	add %rdi, %rax
 	incl (%rax) # gotta increase refcount so we can free it later.
@@ -334,33 +334,16 @@ kn_value_to_string:
 
 .pushsection .data, ""
 kn_value_string_sprintf:        .asciz "%lld"
-kn_value_string_reprs_true:     .asciz "true"
-kn_value_string_reprs_false:    .asciz "false"
-kn_value_string_reprs_null:     .asciz "null"
-kn_value_string_reprs_zero:     .asciz "0"
-kn_value_string_reprs_one:      .asciz "1"
-kn_value_string_reprs_two:      .asciz "2"
+.align 16
 kn_value_string_reprs:
-	.long -2147483648
-	.long 5
-	.quad kn_value_string_reprs_false
-	.long -2147483648
-	.long 1
-	.quad kn_value_string_reprs_zero
+	STATIC_STRING "false", 5
+	STATIC_STRING "0", 1
 	.zero KN_STR_SIZE*6
-	.long -2147483648
-	.long 4
-	.quad kn_value_string_reprs_null
-	.long -2147483648
-	.long 1
-	.quad kn_value_string_reprs_one
+	STATIC_STRING "null", 4
+	STATIC_STRING "1", 1
 	.zero KN_STR_SIZE*6
-	.long -2147483648
-	.long 4
-	.quad kn_value_string_reprs_true
-	.long -2147483648
-	.long 1
-	.quad kn_value_string_reprs_two
+	STATIC_STRING "true", 4
+	STATIC_STRING "2", 1
 .popsection
 
 .globl kn_value_to_boolean

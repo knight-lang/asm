@@ -1,3 +1,5 @@
+.include "debugh.s"
+
 .globl abort
 abort:
 	sub $8, %rsp
