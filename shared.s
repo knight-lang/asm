@@ -19,9 +19,7 @@ xmalloc:
 	je 0f
 	ret
 0:
-	mov $2, %rdi
-	jmp die
-
+	diem "xmalloc failure"
 
 .globl xrealloc
 xrealloc:
@@ -32,8 +30,7 @@ xrealloc:
 	je 0f
 	ret
 0:
-	mov $2, %rdi
-	jmp die
+	diem "xrealloc failure"
 
 .globl kn_hash
 kn_hash:

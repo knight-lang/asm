@@ -39,13 +39,16 @@ kn_ast_alloc:
 	jrcxz .kn_ast_alloc_find_occupied
 
 	# If we're at the end and haven't found a cached thing, we have to allocate ourselves.
-	cmp $1, %rcx
+	# note that allocated asts have an alignment of 1.
+	cmp $1, %cl
 	je .kn_ast_alloc_nocache
 
-	# at this point we've found an occupied slot. let's populate it, zero the old slot, and rreturn it.
+	# at this point we've found an occupied slot. let's populate it, zero the old slot and return it.
 	movq $0, -8(%rdx) # -8 because we already added beforehand.
 	mov %rcx, %rax
-	incl KN_AST_OFF_RC(%rcx)
+	incl KN_AST_OFF_RC(%rcx) # add one to the refcount so further uses can just yoink it.
+
+	# note that `free` sets the rc to 1.
 	mov %rdi, KN_AST_OFF_FN(%rcx)
 	ret
 
@@ -121,11 +124,12 @@ kn_ast_free:
 .globl kn_ast_startup
 kn_ast_startup:
 	# Simply set the end of each AST thing to one, so we can check for it being just one.
-	incq (freed_asts0 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
-	incq (freed_asts1 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
-	incq (freed_asts2 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
-	incq (freed_asts3 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
-	incq (freed_asts4 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
+	# it's `byte` because it starts as 1
+	incb (freed_asts0 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
+	incb (freed_asts1 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
+	incb (freed_asts2 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
+	incb (freed_asts3 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
+	incb (freed_asts4 + 8 * KN_AST_FREE_CACHE_LEN)(%rip)
 	ret
 
 .bss
