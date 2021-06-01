@@ -1,5 +1,3 @@
-#.include "debugh.s"
-
 .globl ddebug
 ddebug:
 	sub $8, %rsp
@@ -28,8 +26,6 @@ dbg_fmt:
 
 .globl debug
 debug:
-// RDI, RSI, RDX, RCX, R8, R9
-	//sub $88, %rsp
 	push %rsp
 	push %rsi
 	push %rdx

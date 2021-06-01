@@ -20,15 +20,17 @@ kn_function_startup:
 	.byte \arity
 	.globl kn_func_\name
 	kn_func_\name:
-
-#	push %rdi
-#	lea definefn_name\@(%rip), %rdi
-#	call _puts
-#	pop %rdi
-#.pushsection .data, ""
-#definefn_name\@:
-#	.asciz "\name"
-#.popsection
+# 
+# .ifndef NDEBUG
+# 	push %rdi
+# 	lea definefn_name\@(%rip), %rdi
+# 	call _puts
+# 	pop %rdi
+# 	.pushsection .data, ""
+# 	definefn_name\@:
+# 		.asciz "\name"
+# 	.popsection
+# .endif
 .endm
 
 /* ARITY ZERO */
@@ -186,8 +188,7 @@ define_fn not, 1, '!'
 	je 0f
 	ret
 0:	
-	and $~0b111, %dil
-	STRING_LEN %rdi, %edi
+	mov (-KN_TAG_STRING + KN_STR_OFF_LEN)(%rdi), %edi
 	test %edi, %edi # only nonempty strings are true.
 	setz %al
 	shl $4, %al
@@ -214,8 +215,9 @@ define_fn not, 1, '!'
 define_fn length, 1, 'L'
 	push %rbx
 	mov (%rdi), %rdi
+	# TODO: preemptively check its type.
 	call kn_value_to_string
-	STRING_LEN %rax, %ebx
+	mov KN_STR_OFF_LEN(%rax), %ebx
 	decl KN_STR_OFF_RC(%rax)
 	jnz 0f
 	mov %rax, %rdi
@@ -234,7 +236,7 @@ define_fn output, 1, 'O'
 	mov %rax, %rbx
 
 	# If the length is zero, we just put a newline and are done.
-	STRING_LEN %rax, %esi
+	mov KN_STR_OFF_LEN(%rax), %esi
 	test %rsi, %rsi
 	jz .kn_output_just_newline
 
@@ -315,16 +317,16 @@ define_fn add, 2, '+'
 
 	# (In the future, we could look up the hashed value.)
 	# Compute the new length and malloc it.
-	STRING_LEN %rbx, %edi
-	STRING_LEN %rax, %ecx
-	add %ecx, %edi
+	mov KN_STR_OFF_LEN(%rbx), %edi
+	add KN_STR_OFF_LEN(%rax), %edi
+	inc %edi
 	call kn_string_malloc
 	mov %rax, %r13
 
 	# Concat concat the first string.
 	STRING_PTR %rax, %rdi
 	STRING_PTR %rbx, %rsi
-	STRING_LEN %rbx, %ebx
+	mov KN_STR_OFF_LEN(%rbx), %ebx
 	mov %ebx, %edx
 	call _memcpy
 
@@ -332,8 +334,8 @@ define_fn add, 2, '+'
 	mov %rax, %rdi
 	add %rbx, %rdi
 	STRING_PTR %r12, %rsi
-	STRING_LEN %r12, %edx
-	inc %edx # +1 so we copy trailing `\0`
+	mov KN_STR_OFF_LEN(%r12), %edx
+	inc %edx # +1 so we copy trailing `\0
 	call _memcpy
 
 	# TODO: free the input strings...
@@ -343,6 +345,9 @@ define_fn add, 2, '+'
 	pop %r12
 	pop %rbx
 	ret
+0:
+	jmp _exit
+	diem "oop"
 
 .kn_func_add_numbers:
 	# we convert rhs to a number and perform the operation
@@ -655,15 +660,16 @@ define_fn eql, 2, '?'
 	jne .kn_func_eql_nonstring
 
 	# now we know they're both strings, we compare them.
-	and $~0b111, %al
-	and $~0b111, %bl
-
 	# Make sure they have the same length.
-	STRING_LEN %rax, %ecx
-	STRING_LEN %rbx, %edx
+	mov (-KN_TAG_STRING + KN_STR_OFF_LEN)(%rax), %ecx
+	mov (-KN_TAG_STRING + KN_STR_OFF_LEN)(%rbx), %edx
 	cmp %ecx, %edx
 	sete %cl
 	jne .kn_func_eql_free_strings
+
+	# TODO: remove these
+	and $~0b111, %al
+	and $~0b111, %bl
 
 	# Now that we actually have to compare them, we need to preserve rax.
 	sub $16, %rsp
@@ -1002,8 +1008,11 @@ define_fn set, 4, 'S'
 	STRING_PTR %rax, %rdi
 	inc %rdi
 
-	STRING_LEN %rax, %esi
-	dec %rsi
+	mov KN_STR_OFF_LEN(%rax), %esi
+	test %esi, %esi
+	jz 0f
+	dec %esi
+0:
 	call kn_string_new_borrowed
 	or $KN_TAG_STRING, %al
 

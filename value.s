@@ -214,7 +214,7 @@ kn_value_to_number_run_var:
 
 	run_var %rdi
 
-	# fallthrough
+	# fallthrough6?…
 .globl kn_value_to_number
 kn_value_to_number:
 	# Fetch the tag

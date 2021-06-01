@@ -7,10 +7,10 @@
 kn_string_malloc:
 	push %rdi
 	inc %rdi
-	mov $1, %esi
-	call _calloc
+	call xmalloc
 	mov %rax, %rdi
 	pop %rsi
+
 	# fallthrough
 
 .globl kn_string_new_owned
@@ -19,6 +19,12 @@ kn_string_new_owned:
 	sub $8, %rsp
 	test %esi, %esi
 	jz 0f
+	.ifndef NDEBUG
+		cmp $0, %esi
+		jg 1f
+		diem "tried to create a string with a negative size"
+	1:
+	.endif
 
 	# Allocate the string data
 	push %rdi
@@ -46,7 +52,8 @@ kn_string_new_owned:
 kn_string_new_borrowed:
 	# todo: actually cache strings.
 	cmp $KN_STR_EMBED_MAXLEN, %esi
-	jle 0f
+	# jle 0f
+
 	# Too large to be embedded, so allocate one on the heap.
 	push %rsi
 	call _strndup
@@ -74,10 +81,12 @@ kn_string_new_borrowed:
 	mov %rax, (%rsp)
 	call _memcpy
 	pop %rax
+
 	ret
 
 .globl kn_string_free
 kn_string_free:
+	ret
 	.ifndef NDEBUG
 		cmpl $0, KN_STR_OFF_RC(%rdi)
 		je 1f
@@ -102,7 +111,6 @@ kn_string_free:
 	jmp _free
 0:
 	ret
-
 
 .data
 .align 16

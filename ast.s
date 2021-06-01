@@ -21,8 +21,8 @@ kn_ast_alloc:
 	KN_FN_ARITY %rdi, %eax
 
 	.ifndef NDEBUG
-		cmp $KN_MAX_ARGC, %eax
-		jl 0f
+		cmp $4, %eax
+		jle 0f
 		diem "arity is above max arity?"
 	0:
 	.endif

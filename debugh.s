@@ -1,5 +1,5 @@
- .equ KN_RECKLESS, 1
- .equ NDEBUG, 1
+# .equ KN_RECKLESS, 1
+# .equ NDEBUG, 1
 
 .macro diem msg:req
 	test $8, %rax
@@ -14,11 +14,4 @@ kn_diem_nooffset_\@:
 kn_die_message\@:
 	.asciz "\msg"
 .popsection
-.endm
-
-.macro unreachable
-	.ifndef NDEBUG
-		_fix_stack
-		call _abort
-	.endif
 .endm
