@@ -572,32 +572,6 @@ kn_value_run:
 0:
 	ret
 
-.globl kn_value_clone
-kn_value_clone:
-	# Find the tag, as well as prepare for returning the passed value.
-	mov %rdi, %rax
-	mov %dil, %cl
-	and $0b111, %cl
-
-	# If it's a constant, number, or variable, just return it as is.
-	cmp $2, %cl
-	jbe 0f
-
-	# Both strings and asts have the refcount in the same position, so cloning them
-	# is simply incrementing a memory index
-	assert_is_one_of %cl, KN_TAG_STRING, KN_TAG_AST
-	and $~0b111, %dil
-	incl (%rdi)
-	.ifndef NDEBUG
-		ret # simply return so we don't fall into the assertion down below
-	.endif
-0:
-	# Make sure it's actually a const, number, or variable
-	assert_is_one_of %cl, KN_TAG_CONSTANT, KN_TAG_VARIABLE, KN_TAG_NUMBER
-
-	# return the passed value.
-	ret
-
 .globl kn_value_free
 kn_value_free:
 	# Find the tag

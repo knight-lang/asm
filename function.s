@@ -872,12 +872,26 @@ define_fn assign, 2, '='
 	mov %rax, (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rcx)
 	mov %rax, (%rsp)
 
-	# Free the old result
+	#/* Free the old result */
+
 	call kn_value_free
 
-	# Clone the new result
-	pop %rdi
-	jmp kn_value_clone
+	#/* Clone the new result */
+	pop %rax
+	mov %al, %cl
+	and $0b111, %cl
+
+	# If it's a constant, number, or variable, just return it as is.
+	cmp $2, %cl
+	jbe 0f
+
+	# Both strings and asts have the refcount in the same position, so cloning them
+	# is simply incrementing a memory index
+	sub %cl, %al
+	incl (%rax)
+	add %cl, %al
+0:
+	ret
 
 define_fn while, 2, 'W'
 	push %rbx
