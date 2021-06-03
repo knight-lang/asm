@@ -45,8 +45,8 @@ define_fn prompt, 0, 'P'
 define_fn random, 0, 'R'
 	sub $8, %rsp
 	call _rand
-	add $8, %rsp
 	KN_NEW_NUMBER %rax
+	add $8, %rsp
 	ret
 
 /* ARITY ONE */
@@ -128,10 +128,10 @@ define_fn call, 1, 'C'
 0:
 	# looks like we gotta free the ast before returning
 	mov %rbx, %rdi
-	mov %rax, %rbx
+	mov %rax, (%rsp)
+	mov (%rsp), %rbx
 	call kn_ast_free
-	mov %rbx, %rax
-	pop %rbx
+	pop %rax
 	ret
 
 define_fn system, 1, '`'
@@ -859,24 +859,24 @@ define_fn assign, 2, '='
 	.endif
 
 	# Store the variable
-	push %rbx
-	mov (%rdi), %rbx
+	push (%rdi)
 
 	# Execute the rhs
 	mov 8(%rdi), %rdi
 	call kn_value_run
 
+	mov (%rsp), %rcx
+
 	# Store the new result, preserving the old one so we can free it.
-	mov (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rbx), %rdi
-	mov %rax, (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rbx)
-	mov %rax, %rbx
+	mov (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rcx), %rdi
+	mov %rax, (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rcx)
+	mov %rax, (%rsp)
 
 	# Free the old result
 	call kn_value_free
 
 	# Clone the new result
-	mov %rbx, %rdi
-	pop %rbx
+	pop %rdi
 	jmp kn_value_clone
 
 define_fn while, 2, 'W'
