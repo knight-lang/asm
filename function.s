@@ -319,7 +319,6 @@ define_fn add, 2, '+'
 	# Compute the new length and malloc it.
 	mov KN_STR_OFF_LEN(%rbx), %edi
 	add KN_STR_OFF_LEN(%rax), %edi
-	inc %edi
 	call kn_string_malloc
 	mov %rax, %r13
 
@@ -330,7 +329,7 @@ define_fn add, 2, '+'
 	mov %ebx, %edx
 	call _memcpy
 
-	# Cocnat the second string
+	# Concat the second string
 	mov %rax, %rdi
 	add %rbx, %rdi
 	STRING_PTR %r12, %rsi
@@ -339,15 +338,11 @@ define_fn add, 2, '+'
 	call _memcpy
 
 	# TODO: free the input strings...
-
 	KN_NEW_STRING %r13, %rax
 	pop %r13
 	pop %r12
 	pop %rbx
 	ret
-0:
-	jmp _exit
-	diem "oop"
 
 .kn_func_add_numbers:
 	# we convert rhs to a number and perform the operation
@@ -872,11 +867,10 @@ define_fn assign, 2, '='
 	mov %rax, (-KN_TAG_VARIABLE + KN_VAR_OFF_VAL)(%rcx)
 	mov %rax, (%rsp)
 
-	#/* Free the old result */
-
+	# Free the old result
 	call kn_value_free
 
-	#/* Clone the new result */
+	# Clone the new result
 	pop %rax
 	mov %al, %cl
 	and $0b111, %cl
